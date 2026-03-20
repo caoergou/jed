@@ -387,8 +387,8 @@ fn handle_mouse(app: &mut App, event: crossterm::event::MouseEvent) {
         let menu_height = actions.len() as i32 + 2;
 
         // 先保存坐标，避免重复借用
-        let saved_mouse_x = *mouse_x as i32;
-        let saved_mouse_y = *mouse_y as i32;
+        let saved_mouse_x = i32::from(*mouse_x);
+        let saved_mouse_y = i32::from(*mouse_y);
 
         let menu_x = saved_mouse_x - 2;
         let menu_y = saved_mouse_y;
@@ -404,7 +404,11 @@ fn handle_mouse(app: &mut App, event: crossterm::event::MouseEvent) {
 
         if in_menu_area {
             let diff = click_y - menu_y - 1;
-            let item_index = if diff < 0 { 0 } else { diff as usize };
+            let item_index = if diff < 0 {
+                0
+            } else {
+                usize::try_from(diff).unwrap_or(0)
+            };
             if item_index < actions.len() {
                 app.menu_hover_row = Some(item_index);
             }
@@ -420,7 +424,11 @@ fn handle_mouse(app: &mut App, event: crossterm::event::MouseEvent) {
             if in_menu_area {
                 // 计算点击了哪一项（减去标题行）
                 let diff = click_y - menu_y - 1;
-                let item_index = if diff < 0 { 0 } else { diff as usize };
+                let item_index = if diff < 0 {
+                    0
+                } else {
+                    usize::try_from(diff).unwrap_or(0)
+                };
                 if item_index < actions.len() {
                     let action = actions[item_index];
                     app.execute_context_action(action);
