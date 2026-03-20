@@ -1,4 +1,9 @@
-#![allow(clippy::unnested_or_patterns)]
+#![allow(clippy::unnested_or_patterns, clippy::too_many_lines)]
+#![allow(
+    clippy::cast_lossless,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap
+)]
 
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEventKind};
 use std::time::Instant;
