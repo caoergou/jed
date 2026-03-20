@@ -99,7 +99,7 @@ impl ContextAction {
         ]
     }
 
-    pub fn label(&self) -> &'static str {
+    pub fn label(self) -> &'static str {
         match self {
             ContextAction::Edit => "编辑",
             ContextAction::AddChild => "添加子级",
@@ -452,7 +452,7 @@ impl App {
             // 如果原路径在展开集合中，更新为新路径
             if self.expanded.contains(&path) {
                 self.expanded.remove(&path);
-                self.expanded.insert(new_path.clone());
+                self.expanded.insert(new_path);
             }
 
             self.set_status("已重命名", StatusLevel::Info);
