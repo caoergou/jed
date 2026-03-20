@@ -446,7 +446,7 @@ impl App {
             let new_path = if let Some(parent_end) = path.rfind('.') {
                 format!("{}.{}", &path[..parent_end], new_key)
             } else {
-                format!(".{}", new_key)
+                format!(".{new_key}")
             };
 
             // 如果原路径在展开集合中，更新为新路径
@@ -542,28 +542,24 @@ impl App {
             ContextAction::CopyKey => {
                 // 复制 key（如果是对象键）
                 let key = &line.display_key;
-                if !key.is_empty() {
-                    if let Err(e) = Self::copy_to_clipboard(key) {
-                        self.set_status(&format!("复制失败：{e}"), StatusLevel::Error);
-                    } else {
-                        self.set_status(&format!("已复制 key: {key}"), StatusLevel::Info);
-                    }
-                } else {
+                if key.is_empty() {
                     self.set_status("当前节点没有 key", StatusLevel::Warn);
+                } else if let Err(e) = Self::copy_to_clipboard(key) {
+                    self.set_status(&format!("复制失败：{e}"), StatusLevel::Error);
+                } else {
+                    self.set_status(&format!("已复制 key: {key}"), StatusLevel::Info);
                 }
                 self.mode = AppMode::Normal;
             }
             ContextAction::CopyValue => {
                 // 复制 value
                 let value = &line.value_preview;
-                if !value.is_empty() {
-                    if let Err(e) = Self::copy_to_clipboard(value) {
-                        self.set_status(&format!("复制失败：{e}"), StatusLevel::Error);
-                    } else {
-                        self.set_status("已复制 value", StatusLevel::Info);
-                    }
-                } else {
+                if value.is_empty() {
                     self.set_status("当前节点没有 value", StatusLevel::Warn);
+                } else if let Err(e) = Self::copy_to_clipboard(value) {
+                    self.set_status(&format!("复制失败：{e}"), StatusLevel::Error);
+                } else {
+                    self.set_status("已复制 value", StatusLevel::Info);
                 }
                 self.mode = AppMode::Normal;
             }
