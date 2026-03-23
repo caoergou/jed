@@ -49,11 +49,6 @@ pub fn render(frame: &mut Frame, app: &mut App) {
         render_add_node_overlay(frame, app, area);
     }
 
-    // 确认剥离注释覆盖层
-    if matches!(app.mode, AppMode::ConfirmStripComments) {
-        render_confirm_overlay(frame, area);
-    }
-
     // 帮助面板覆盖层
     if matches!(app.mode, AppMode::Help) {
         render_help_panel(frame, area);
@@ -244,10 +239,6 @@ fn render_helpbar(frame: &mut Frame, app: &App, area: Rect) {
         AppMode::AddNode { .. } => vec![
             ("Enter", t_to("tui.hint.confirm", &locale)),
             ("Esc", t_to("tui.hint.cancel", &locale)),
-        ],
-        AppMode::ConfirmStripComments => vec![
-            ("Y", t_to("tui.hint.confirm", &locale)),
-            ("N", t_to("tui.hint.cancel", &locale)),
         ],
         AppMode::Help => vec![
             ("F1/Esc", t_to("tui.hint.close", &locale)),
@@ -489,51 +480,6 @@ fn render_add_node_overlay(frame: &mut Frame, app: &App, area: Rect) {
     let cursor_x = overlay_area.x + 1 + (*key_cursor as u16).min(overlay_area.width - 3);
     let cursor_y = overlay_area.y + 1;
     frame.set_cursor_position((cursor_x, cursor_y));
-}
-
-// ── 确认覆盖层 ───────────────────────────────────────────────────────────────
-
-fn render_confirm_overlay(frame: &mut Frame, area: Rect) {
-    let overlay_height = 6u16;
-    let overlay_width = 50u16;
-    if area.height < overlay_height + 2 || area.width < overlay_width + 2 {
-        return;
-    }
-    let overlay_area = Rect {
-        x: area.x + (area.width - overlay_width) / 2,
-        y: area.y + (area.height - overlay_height) / 2,
-        width: overlay_width,
-        height: overlay_height,
-    };
-
-    frame.render_widget(Clear, overlay_area);
-
-    // 带按钮的确认框
-    let msg = vec![
-        Line::from(""),
-        Line::from(Span::styled(
-            "  此文件含有注释（JSONC 格式）。",
-            Style::default().fg(Color::Yellow),
-        )),
-        Line::from(Span::styled(
-            "  保存后注释将被移除，是否继续？",
-            Style::default().fg(Color::Yellow),
-        )),
-        Line::from(""),
-        Line::from(vec![Span::styled(
-            "   [ Y ] 确认    [ N ] 取消   ",
-            Style::default().fg(Color::White),
-        )]),
-    ];
-
-    let para = Paragraph::new(msg).block(
-        Block::default()
-            .title(" 注意 ")
-            .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::Yellow)),
-    );
-
-    frame.render_widget(para, overlay_area);
 }
 
 // ── 退出确认覆盖层 ───────────────────────────────────────────────────────────

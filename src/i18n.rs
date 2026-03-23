@@ -64,6 +64,7 @@ pub fn modifier_key() -> &'static str {
 
 /// Platform-specific shortcut prefix.
 /// Returns "⌘" for macOS, "Ctrl" for others.
+#[allow(dead_code)]
 pub fn modifier_key_shortcut() -> &'static str {
     if OS == "macos" {
         "⌘"
@@ -73,6 +74,7 @@ pub fn modifier_key_shortcut() -> &'static str {
 }
 
 /// Check if the current platform is macOS.
+#[allow(dead_code)]
 pub fn is_macos() -> bool {
     OS == "macos"
 }

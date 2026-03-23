@@ -42,8 +42,6 @@ pub enum AppMode {
         /// 光标在缓冲区中的字节位置。
         cursor_pos: usize,
     },
-    /// 等待确认剥离注释。
-    ConfirmStripComments,
     /// 帮助面板。
     Help,
     /// 退出确认（文件已修改时）。
@@ -827,13 +825,6 @@ impl App {
     pub fn cancel_save(&mut self) {
         self.mode = AppMode::Normal;
         self.set_status(&t_to("tui.status.cancel_save", &get_locale()), StatusLevel::Info);
-    }
-
-    /// 确认剥离注释后保存。
-    pub fn confirm_save_strip_comments(&mut self) {
-        self.has_comments = false;
-        self.do_save();
-        self.mode = AppMode::Normal;
     }
 
     pub fn do_save(&mut self) {

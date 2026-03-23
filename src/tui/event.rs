@@ -8,7 +8,7 @@
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEventKind};
 use std::time::{Duration, Instant};
 
-use super::app::{App, AppMode, ContextAction, StatusLevel};
+use super::app::{App, AppMode, ContextAction};
 
 // 双击时间间隔（毫秒）
 const DOUBLE_CLICK_MS: u64 = 500;
@@ -27,7 +27,6 @@ fn handle_key(app: &mut App, key: KeyEvent) {
         AppMode::Normal => handle_normal(app, key),
         AppMode::Edit { .. } => handle_edit(app, key),
         AppMode::EditKey { .. } => handle_edit_key(app, key),
-        AppMode::ConfirmStripComments => handle_confirm(app, key),
         AppMode::Help => handle_help(app, key),
         AppMode::ConfirmQuit { .. } => handle_confirm_quit(app, key),
         AppMode::ConfirmSave { .. } => handle_confirm_save(app, key),
@@ -310,20 +309,6 @@ fn handle_confirm_quit(app: &mut App, key: KeyEvent) {
         KeyCode::Char('c') | KeyCode::Char('C') | KeyCode::Esc => {
             app.mode = AppMode::Normal;
             app.last_escape_time = None;
-        }
-        _ => {}
-    }
-}
-
-// ── 确认模式 ─────────────────────────────────────────────────────────────────
-
-fn handle_confirm(app: &mut App, key: KeyEvent) {
-    match key.code {
-        KeyCode::Char('y') | KeyCode::Char('Y') => {
-            app.confirm_save_strip_comments();
-        }
-        KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {
-            app.cancel_save();
         }
         _ => {}
     }
