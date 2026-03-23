@@ -16,6 +16,7 @@ indexmap = { version = "2", features = ["serde"] }
 clap = { version = "4", features = ["derive"] }
 clap_complete = "4"
 thiserror = "2"
+tempfile = "3"
 ratatui = "0.29"
 crossterm = "0.28"
 arboard = "3"

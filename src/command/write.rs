@@ -1,9 +1,10 @@
 use std::path::Path;
 
 use crate::{
-    command::{exit_code, load_lenient, print_error, print_ok, write_file_atomic},
-    engine::{FormatOptions, JsonValue, add, delete, format_pretty, move_value, set},
+    command::{exit_code, load_lenient, write_file_atomic},
+    engine::{add, delete, format_pretty, get, move_value, set, FormatOptions, JsonValue},
     i18n::{get_locale, t_to},
+    output::Ctx,
 };
 
 /// `set <path> <value>` — 设置值，路径不存在时自动创建。
@@ -11,35 +12,39 @@ pub fn cmd_set(
     file: &Path,
     path: &str,
     raw_value: &str,
-    json_output: bool,
+    ctx: &Ctx,
 ) -> Result<i32, Box<dyn std::error::Error>> {
+    let file_str = file.display().to_string();
     let (mut doc, _) = load_lenient(file)?;
     let value = parse_value_arg(raw_value);
     set(&mut doc, path, value)?;
     save(file, &doc)?;
-    print_ok("ok", json_output);
+    let actions = vec![format!("jed get {path} {file_str}")];
+    // Return the new value as confirmation
+    if let Ok(new_val) = get(&doc, path) {
+        ctx.print_value_with_actions(new_val, &actions);
+    } else {
+        ctx.print_ok_with_actions("ok", &actions);
+    }
     Ok(exit_code::OK)
 }
 
 /// `del <path>` — 删除 key 或数组元素。
-pub fn cmd_del(
-    file: &Path,
-    path: &str,
-    json_output: bool,
-) -> Result<i32, Box<dyn std::error::Error>> {
+pub fn cmd_del(file: &Path, path: &str, ctx: &Ctx) -> Result<i32, Box<dyn std::error::Error>> {
     let locale = get_locale();
+    let file_str = file.display().to_string();
     let (mut doc, _) = load_lenient(file)?;
     match delete(&mut doc, path) {
         Ok(_) => {
             save(file, &doc)?;
-            print_ok("ok", json_output);
+            let actions = vec![format!("jed keys . {file_str}")];
+            ctx.print_ok_with_actions("deleted", &actions);
             Ok(exit_code::OK)
         }
         Err(e) => {
-            print_error(
-                &t_to("err.delete_failed", &locale).replace("{0}", &e.to_string()),
-                json_output,
-            );
+            let msg = t_to("err.delete_failed", &locale).replace("{0}", &e.to_string());
+            let fix = format!("Run 'jed keys . {file_str}' to verify the path exists");
+            ctx.print_error(&msg, Some(&fix), &[format!("jed keys . {file_str}")]);
             Ok(exit_code::NOT_FOUND)
         }
     }
@@ -50,13 +55,22 @@ pub fn cmd_add(
     file: &Path,
     path: &str,
     raw_value: &str,
-    json_output: bool,
+    ctx: &Ctx,
 ) -> Result<i32, Box<dyn std::error::Error>> {
+    let file_str = file.display().to_string();
     let (mut doc, _) = load_lenient(file)?;
     let value = parse_value_arg(raw_value);
     add(&mut doc, path, value)?;
     save(file, &doc)?;
-    print_ok("ok", json_output);
+    let actions = vec![
+        format!("jed len {path} {file_str}"),
+        format!("jed get {path} {file_str}"),
+    ];
+    if let Ok(updated) = get(&doc, path) {
+        ctx.print_value_with_actions(updated, &actions);
+    } else {
+        ctx.print_ok_with_actions("added", &actions);
+    }
     Ok(exit_code::OK)
 }
 
@@ -65,12 +79,18 @@ pub fn cmd_mv(
     file: &Path,
     src: &str,
     dst: &str,
-    json_output: bool,
+    ctx: &Ctx,
 ) -> Result<i32, Box<dyn std::error::Error>> {
+    let file_str = file.display().to_string();
     let (mut doc, _) = load_lenient(file)?;
     move_value(&mut doc, src, dst)?;
     save(file, &doc)?;
-    print_ok("ok", json_output);
+    let actions = vec![format!("jed get {dst} {file_str}")];
+    if let Ok(moved_val) = get(&doc, dst) {
+        ctx.print_value_with_actions(moved_val, &actions);
+    } else {
+        ctx.print_ok_with_actions("moved", &actions);
+    }
     Ok(exit_code::OK)
 }
 
@@ -78,9 +98,10 @@ pub fn cmd_mv(
 pub fn cmd_patch(
     file: &Path,
     raw_ops: &str,
-    json_output: bool,
+    ctx: &Ctx,
 ) -> Result<i32, Box<dyn std::error::Error>> {
     let locale = get_locale();
+    let file_str = file.display().to_string();
     let (mut doc, _) = load_lenient(file)?;
 
     let ops: Vec<PatchOp> = serde_json::from_str(raw_ops)
@@ -91,23 +112,22 @@ pub fn cmd_patch(
     for op in &ops {
         let result = apply_patch_op(&mut doc, op);
         if let Err(e) = result {
-            print_error(
-                &t_to("err.patch_op_failed", &locale)
-                    .replace("{0}", &(applied + 1).to_string())
-                    .replace("{1}", &e.to_string()),
-                json_output,
-            );
+            let msg = t_to("err.patch_op_failed", &locale)
+                .replace("{0}", &(applied + 1).to_string())
+                .replace("{1}", &e.to_string());
+            let fix = "Check operation path and value, then retry";
+            ctx.print_error(&msg, Some(fix), &[]);
             return Ok(exit_code::ERROR);
         }
         applied += 1;
     }
 
     save(file, &doc)?;
-    if json_output {
-        println!("{}", serde_json::json!({"ok": true, "patched": applied}));
-    } else {
-        println!("patched {applied} ops");
-    }
+    let actions = vec![format!("jed get . {file_str}")];
+    ctx.print_raw_with_actions(
+        serde_json::json!({"patched": applied}),
+        &actions,
+    );
     Ok(exit_code::OK)
 }
 
@@ -150,7 +170,9 @@ fn apply_patch_op(doc: &mut JsonValue, op: &PatchOp) -> Result<(), Box<dyn std::
             let actual = crate::engine::get(doc, &op.path)?;
             let expected_je = JsonValue::from(expected.clone());
             if *actual != expected_je {
-                return Err(format!("test 断言失败：路径 {} 的值不符合预期", op.path).into());
+                return Err(
+                    format!("test 断言失败：路径 {} 的值不符合预期", op.path).into(),
+                );
             }
         }
         unknown => {

@@ -8,8 +8,6 @@ use clap_complete::Shell;
     name = "jed",
     about = "Jed — JSON editor: dual-interface tool for humans and AI agents",
     version,
-    disable_help_flag = true,
-    disable_help_subcommand = true,
 )]
 pub struct Cli {
     /// JSON 文件（位置参数）
@@ -28,10 +26,6 @@ pub struct Cli {
     #[arg(short, long)]
     pub quiet: bool,
 
-    /// 显示帮助
-    #[arg(long, short = 'h', action = clap::ArgAction::Count)]
-    pub help: u8,
-
     #[command(subcommand)]
     pub command: Option<Command>,
 }
@@ -49,16 +43,12 @@ pub fn resolve_file(
     cmd_file: Option<&PathBuf>,
 ) -> Option<PathBuf> {
     // 1. 全局 --file
-    if let Some(f) = cli_file {
-        if f.to_str() != Some("-") {
-            return Some(f.clone());
-        }
+    if let Some(f) = cli_file && f.to_str() != Some("-") {
+        return Some(f.clone());
     }
     // 2. 子命令位置参数
-    if let Some(f) = cmd_file {
-        if f.to_str() != Some("-") {
-            return Some(f.clone());
-        }
+    if let Some(f) = cmd_file && f.to_str() != Some("-") {
+        return Some(f.clone());
     }
     // 3. 默认 stdin
     None

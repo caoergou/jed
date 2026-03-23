@@ -2,13 +2,17 @@ mod cli;
 mod command;
 mod engine;
 mod i18n;
+mod output;
 mod tui;
 
 use clap::{CommandFactory, Parser};
-use std::io::Read;
+use std::io::{Read, Write};
 use std::path::PathBuf;
 
-use crate::cli::{resolve_file, Cli, Command};
+use crate::{
+    cli::{resolve_file, Cli, Command},
+    output::Ctx,
+};
 
 fn main() {
     let cli = Cli::parse();
@@ -19,36 +23,23 @@ fn main() {
         unsafe { std::env::set_var("JE_LANG", lang) };
     }
 
-    let json_output = cli.json;
+    let json = cli.json;
 
     match &cli.command {
-        // 显示帮助
-        _ if cli.help > 0 => {
-            if cli.help > 1 || cli.command.is_none() {
-                // -h 或没有子命令时显示全局帮助
-                let mut cmd = Cli::command();
-                cmd.print_help().ok();
-                println!();
-            } else if let Some(_cmd) = &cli.command {
-                // 显示子命令帮助
-                let mut cmd = Cli::command();
-                cmd.print_help().ok();
-            }
-        }
-
         // 列出所有命令
-        Some(Command::Commands {}) => {
-            print_commands(json_output);
+        Some(Command::Commands) => {
+            let ctx = Ctx::new("commands", json);
+            print_commands(&ctx);
         }
 
         // 命令帮助
         Some(Command::Explain { command }) => {
-            print_command_help(command, json_output);
+            let ctx = Ctx::new("explain", json);
+            print_command_help(command, &ctx);
         }
 
         // 补全脚本
         Some(Command::Completions { shell }) => {
-            use clap::CommandFactory;
             use clap_complete::generate;
             let mut cmd = Cli::command();
             generate(*shell, &mut cmd, "jed", &mut std::io::stdout());
@@ -62,47 +53,44 @@ fn main() {
         }) => {
             let f = resolve_file(cli.get_file().as_ref(), Some(file));
             let f = resolve_input_file(f.as_ref());
-            command::run_tree(&f, *expand_all, path.as_deref(), json_output);
+            command::run_tree(&f, *expand_all, path.as_deref(), json);
         }
 
         // Query 命令
         Some(Command::Query { filter, file }) => {
             let f = resolve_file(cli.get_file().as_ref(), Some(file));
             let f = resolve_input_file(f.as_ref());
-            command::run_query(&f, filter, json_output);
+            command::run_query(&f, filter, json);
         }
 
         // Validate 命令
         Some(Command::Validate { schema, file }) => {
             let f = resolve_file(cli.get_file().as_ref(), Some(file));
             let f = resolve_input_file(f.as_ref());
-            command::run_validate(&f, schema, json_output);
+            command::run_validate(&f, schema, json);
         }
 
         // Convert 命令
         Some(Command::Convert { format, file }) => {
             let f = resolve_file(cli.get_file().as_ref(), Some(file));
             let f = resolve_input_file(f.as_ref());
-            command::run_convert(&f, format, json_output);
+            command::run_convert(&f, format, json);
         }
 
         Some(cmd) => {
-            // 获取文件参数
             let file = get_file_from_command(cmd, cli.get_file().as_ref());
             let file = resolve_input_file(Some(&file));
-            command::run(&file, cmd.clone(), json_output);
+            command::run(&file, cmd.clone(), json);
         }
 
         None => {
             // 无命令时进入 TUI 模式
-            let file = cli.get_file().map(|f| {
+            let file = cli.get_file().inspect(|f| {
                 if f.to_str() == Some("-") {
-                    // TUI 模式不支持 stdin
                     let locale = i18n::get_locale();
                     eprintln!("{}", i18n::t_to("main.need_file", &locale));
                     std::process::exit(1);
                 }
-                f.clone()
             });
 
             if let Some(file) = file {
@@ -122,14 +110,10 @@ fn main() {
 
 /// 从命令参数中提取文件路径
 fn get_file_from_command(cmd: &Command, cli_file: Option<&PathBuf>) -> PathBuf {
-    // 优先使用全局 --file
-    if let Some(f) = cli_file {
-        if f.to_str() != Some("-") {
-            return f.clone();
-        }
+    if let Some(f) = cli_file && f.to_str() != Some("-") {
+        return f.clone();
     }
 
-    // 从命令中获取
     match cmd {
         Command::Get { file, .. }
         | Command::Keys { file, .. }
@@ -150,14 +134,12 @@ fn get_file_from_command(cmd: &Command, cli_file: Option<&PathBuf>) -> PathBuf {
         | Command::Tree { file, .. }
         | Command::Query { file, .. }
         | Command::Convert { file, .. } => file.clone(),
-
         Command::Validate { file, .. } => file.clone(),
-
         _ => PathBuf::from("-"),
     }
 }
 
-/// 解析输入文件（支持 stdin）
+/// 解析输入文件，stdin 时写入唯一临时文件。
 fn resolve_input_file(file: Option<&PathBuf>) -> PathBuf {
     let Some(f) = file else {
         eprintln!("Error: No input file specified");
@@ -165,87 +147,111 @@ fn resolve_input_file(file: Option<&PathBuf>) -> PathBuf {
     };
 
     let f_str = f.to_str().unwrap_or("-");
-    if f_str == "-" {
-        // 从 stdin 读取
-        let mut input = String::new();
-        if std::io::stdin().read_to_string(&mut input).is_err() {
-            eprintln!("Error: Failed to read from stdin");
-            std::process::exit(1);
-        }
-        let mut temp_path = std::env::temp_dir();
-        temp_path.push("jed_stdin.json");
-        if let Err(e) = std::fs::write(&temp_path, &input) {
-            eprintln!("Error: Failed to write temp file: {}", e);
-            std::process::exit(1);
-        }
-        return temp_path;
+    if f_str != "-" {
+        return f.clone();
     }
 
-    f.clone()
-}
-
-/// 打印所有可用命令
-fn print_commands(json_output: bool) {
-    let commands = serde_json::json!([
-        {"name": "get", "description": "Get value at path"},
-        {"name": "keys", "description": "List all keys or indices"},
-        {"name": "len", "description": "Get array length or key count"},
-        {"name": "type", "description": "Get value type"},
-        {"name": "exists", "description": "Check if path exists"},
-        {"name": "schema", "description": "Generate structure summary"},
-        {"name": "check", "description": "Validate JSON format"},
-        {"name": "set", "description": "Set value at path"},
-        {"name": "del", "description": "Delete key or element"},
-        {"name": "add", "description": "Append to array or merge to object"},
-        {"name": "patch", "description": "Batch operations (JSON Patch)"},
-        {"name": "mv", "description": "Move/rename key"},
-        {"name": "fmt", "description": "Format JSON"},
-        {"name": "fix", "description": "Auto-fix JSON errors"},
-        {"name": "minify", "description": "Minify JSON"},
-        {"name": "diff", "description": "Compare two JSON files"},
-        {"name": "tree", "description": "Show tree structure (non-interactive)"},
-        {"name": "query", "description": "Filter/query JSON (jq-like)"},
-        {"name": "validate", "description": "Validate against JSON Schema"},
-        {"name": "convert", "description": "Convert to other formats"},
-        {"name": "commands", "description": "List all commands"},
-        {"name": "explain", "description": "Get command help"},
-        {"name": "completions", "description": "Generate shell completions"}
-    ]);
-
-    if json_output {
-        println!("{{\"ok\":true,\"commands\":{}}}", commands);
-    } else {
-        println!("Available commands:");
-        for cmd in commands.as_array().unwrap() {
-            println!("  {}  - {}", cmd["name"], cmd["description"]);
-        }
+    // 从 stdin 读取，写入唯一临时文件（避免多实例竞态）
+    let mut input = String::new();
+    if std::io::stdin().read_to_string(&mut input).is_err() {
+        eprintln!("Error: Failed to read from stdin");
+        std::process::exit(1);
     }
-}
 
-/// 打印命令帮助
-fn print_command_help(cmd_name: &str, json_output: bool) {
-    let help = match cmd_name {
-        "get" => serde_json::json!({
-            "name": "get",
-            "usage": "jed [FILE] get <PATH>",
-            "description": "Get value at path (Agent-friendly)",
-            "example": "jed config.json get .database.host"
-        }),
-        "set" => serde_json::json!({
-            "name": "set",
-            "usage": "jed [FILE] set <PATH> <VALUE>",
-            "description": "Set value at path",
-            "example": "jed config.json set .debug true"
-        }),
-        _ => serde_json::json!({"error": format!("Unknown command: {}", cmd_name)}),
+    let mut tmp = match tempfile::NamedTempFile::new() {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln!("Error: Failed to create temp file: {e}");
+            std::process::exit(1);
+        }
     };
 
-    if json_output {
-        println!("{{\"ok\":true,\"help\":{}}}", help);
+    if tmp.write_all(input.as_bytes()).is_err() {
+        eprintln!("Error: Failed to write to temp file");
+        std::process::exit(1);
+    }
+
+    // keep() prevents the temp file from being deleted when `tmp` drops
+    match tmp.keep() {
+        Ok((_, path)) => path,
+        Err(e) => {
+            eprintln!("Error: Failed to persist temp file: {e}");
+            std::process::exit(1);
+        }
+    }
+}
+
+// ── 命令发现 / 帮助 ───────────────────────────────────────────────────────────
+
+/// 所有命令的元数据
+struct CmdMeta {
+    name: &'static str,
+    usage: &'static str,
+    description: &'static str,
+    example: &'static str,
+}
+
+fn all_commands() -> Vec<CmdMeta> {
+    vec![
+        CmdMeta { name: "get",         usage: "jed get <path> <file>",                    description: "Get value at path",                          example: "jed get .database.host config.json" },
+        CmdMeta { name: "keys",        usage: "jed keys [path] <file>",                   description: "List all keys or array indices at path",      example: "jed keys .users config.json" },
+        CmdMeta { name: "len",         usage: "jed len [path] <file>",                    description: "Get array length or object key count",        example: "jed len .items data.json" },
+        CmdMeta { name: "type",        usage: "jed type [path] <file>",                   description: "Get the type of a value",                     example: "jed type .version config.json" },
+        CmdMeta { name: "exists",      usage: "jed exists <path> <file>",                 description: "Check if a path exists (exit 0=yes, 2=no)",   example: "jed exists .debug config.json" },
+        CmdMeta { name: "schema",      usage: "jed schema <file>",                        description: "Infer and display the structure of the file",  example: "jed schema config.json" },
+        CmdMeta { name: "check",       usage: "jed check <file>",                         description: "Validate JSON syntax",                        example: "jed check config.json" },
+        CmdMeta { name: "set",         usage: "jed set <path> <value> <file>",            description: "Set a value at path (creates if missing)",    example: "jed set .debug true config.json" },
+        CmdMeta { name: "del",         usage: "jed del <path> <file>",                    description: "Delete a key or array element",               example: "jed del .deprecated config.json" },
+        CmdMeta { name: "add",         usage: "jed add [path] <value> <file>",            description: "Append to array or merge into object",        example: "jed add .tags '\"beta\"' config.json" },
+        CmdMeta { name: "patch",       usage: "jed patch <operations> <file>",            description: "Batch operations via JSON Patch (RFC 6902)",  example: "jed patch '[{\"op\":\"replace\",\"path\":\".x\",\"value\":1}]' f.json" },
+        CmdMeta { name: "mv",          usage: "jed mv <src> <dst> <file>",                description: "Move/rename a key",                           example: "jed mv .oldName .newName config.json" },
+        CmdMeta { name: "fmt",         usage: "jed fmt [--indent N] <file>",              description: "Pretty-format JSON in-place",                 example: "jed fmt --indent 4 config.json" },
+        CmdMeta { name: "fix",         usage: "jed fix [--dry-run] [--strip-comments] <file>", description: "Auto-repair common JSON errors",         example: "jed fix --dry-run broken.json" },
+        CmdMeta { name: "minify",      usage: "jed minify <file>",                        description: "Minify JSON (remove all whitespace)",         example: "jed minify data.json" },
+        CmdMeta { name: "diff",        usage: "jed diff <other> <file>",                  description: "Compare two JSON files (exit 0=same, 1=diff)", example: "jed diff new.json old.json" },
+        CmdMeta { name: "tree",        usage: "jed tree [-e] [-p <path>] <file>",         description: "Display JSON as a tree",                      example: "jed tree -e config.json" },
+        CmdMeta { name: "query",       usage: "jed query <filter> <file>",                description: "Filter/query JSON using path expressions",    example: "jed query .users[0] data.json" },
+        CmdMeta { name: "validate",    usage: "jed validate <schema> <file>",             description: "Validate against a JSON Schema file",         example: "jed validate schema.json data.json" },
+        CmdMeta { name: "convert",     usage: "jed convert <format> <file>",              description: "Convert JSON to another format (yaml)",       example: "jed convert yaml config.json" },
+        CmdMeta { name: "commands",    usage: "jed commands",                             description: "List all available commands",                 example: "jed commands" },
+        CmdMeta { name: "explain",     usage: "jed explain <command>",                    description: "Show detailed help for a command",            example: "jed explain set" },
+        CmdMeta { name: "completions", usage: "jed completions <shell>",                  description: "Generate shell completion script",            example: "jed completions bash > ~/.bash_completion.d/jed" },
+    ]
+}
+
+fn print_commands(ctx: &Ctx) {
+    let cmds: Vec<serde_json::Value> = all_commands()
+        .iter()
+        .map(|c| {
+            serde_json::json!({
+                "name": c.name,
+                "usage": c.usage,
+                "description": c.description,
+            })
+        })
+        .collect();
+
+    let actions = vec!["jed explain <command>".to_string()];
+    ctx.print_raw_with_actions(serde_json::json!({"commands": cmds}), &actions);
+}
+
+fn print_command_help(cmd_name: &str, ctx: &Ctx) {
+    let cmds = all_commands();
+    if let Some(c) = cmds.iter().find(|c| c.name == cmd_name) {
+        ctx.print_raw(serde_json::json!({
+            "name":        c.name,
+            "usage":       c.usage,
+            "description": c.description,
+            "example":     c.example,
+        }));
     } else {
-        println!("Command: {}", help["name"]);
-        println!("Usage: {}", help["usage"]);
-        println!("Description: {}", help["description"]);
-        println!("Example: {}", help["example"]);
+        let fix = "Run 'jed commands' to see all available commands";
+        let actions = vec!["jed commands".to_string()];
+        ctx.print_error(
+            &format!("Unknown command: '{cmd_name}'"),
+            Some(fix),
+            &actions,
+        );
+        std::process::exit(command::exit_code::ERROR);
     }
 }

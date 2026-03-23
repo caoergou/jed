@@ -6,8 +6,9 @@ use std::{fs, path::Path, process};
 
 use crate::{
     cli::Command,
-    engine::{JsonValue, parse_lenient},
+    engine::{get, parse_lenient, JsonValue},
     i18n::{get_locale, t_to},
+    output::Ctx,
 };
 
 /// 命令模式的统一退出码。
@@ -19,97 +20,110 @@ pub mod exit_code {
 }
 
 /// 执行命令并以适当的退出码退出。
-pub fn run(file: &Path, cmd: Command, json_output: bool) {
-    let result = dispatch(file, cmd, json_output);
+pub fn run(file: &Path, cmd: Command, json: bool) {
+    let cmd_name = cmd_static_name(&cmd);
+    let ctx = Ctx::new(cmd_name, json);
+    let result = dispatch(file, cmd, &ctx);
     match result {
         Ok(code) => process::exit(code),
         Err(e) => {
-            print_error(&e.to_string(), json_output);
+            ctx.print_error(&e.to_string(), None, &[]);
             process::exit(exit_code::ERROR);
         }
     }
 }
 
-fn dispatch(
-    file: &Path,
-    cmd: Command,
-    json_output: bool,
-) -> Result<i32, Box<dyn std::error::Error>> {
+fn dispatch(file: &Path, cmd: Command, ctx: &Ctx) -> Result<i32, Box<dyn std::error::Error>> {
     match cmd {
-        Command::Get { path, .. } => read::cmd_get(file, &path, json_output),
-        Command::Keys { path, .. } => read::cmd_keys(file, &path, json_output),
-        Command::Len { path, .. } => read::cmd_len(file, &path, json_output),
-        Command::Type { path, .. } => read::cmd_type(file, &path, json_output),
-        Command::Exists { path, .. } => read::cmd_exists(file, &path, json_output),
-        Command::Schema { .. } => read::cmd_schema(file, json_output),
-        Command::Check { .. } => read::cmd_check(file, json_output),
-        Command::Set { path, value, .. } => write::cmd_set(file, &path, &value, json_output),
-        Command::Del { path, .. } => write::cmd_del(file, &path, json_output),
-        Command::Add { path, value, .. } => write::cmd_add(file, &path, &value, json_output),
-        Command::Patch { operations, .. } => write::cmd_patch(file, &operations, json_output),
-        Command::Mv { src, dst, .. } => write::cmd_mv(file, &src, &dst, json_output),
-        Command::Fmt { indent, .. } => repair::cmd_fmt(file, indent, json_output),
+        Command::Get { path, .. } => read::cmd_get(file, &path, ctx),
+        Command::Keys { path, .. } => read::cmd_keys(file, &path, ctx),
+        Command::Len { path, .. } => read::cmd_len(file, &path, ctx),
+        Command::Type { path, .. } => read::cmd_type(file, &path, ctx),
+        Command::Exists { path, .. } => read::cmd_exists(file, &path, ctx),
+        Command::Schema { .. } => read::cmd_schema(file, ctx),
+        Command::Check { .. } => read::cmd_check(file, ctx),
+        Command::Set { path, value, .. } => write::cmd_set(file, &path, &value, ctx),
+        Command::Del { path, .. } => write::cmd_del(file, &path, ctx),
+        Command::Add { path, value, .. } => write::cmd_add(file, &path, &value, ctx),
+        Command::Patch { operations, .. } => write::cmd_patch(file, &operations, ctx),
+        Command::Mv { src, dst, .. } => write::cmd_mv(file, &src, &dst, ctx),
+        Command::Fmt { indent, .. } => repair::cmd_fmt(file, indent, ctx),
         Command::Fix {
             dry_run,
             strip_comments,
             ..
-        } => repair::cmd_fix(file, dry_run, strip_comments, json_output),
-        Command::Minify { .. } => repair::cmd_minify(file, json_output),
-        Command::Diff { other, .. } => read::cmd_diff(file, &other, json_output),
-        Command::Completions { .. } => unreachable!("completions is handled in main"),
-        Command::Commands {} => {
-            // 已在上层处理
-            Ok(exit_code::OK)
-        }
-        Command::Explain { .. } => {
-            // 已在上层处理
-            Ok(exit_code::OK)
-        }
-        Command::Tree { .. } => {
-            // 已在上层处理
-            Ok(exit_code::OK)
-        }
-        Command::Query { .. } => {
-            // 已在上层处理
-            Ok(exit_code::OK)
-        }
-        Command::Validate { .. } => {
-            // 已在上层处理
-            Ok(exit_code::OK)
-        }
-        Command::Convert { .. } => {
-            // 已在上层处理
-            Ok(exit_code::OK)
-        }
+        } => repair::cmd_fix(file, dry_run, strip_comments, ctx),
+        Command::Minify { .. } => repair::cmd_minify(file, ctx),
+        Command::Diff { other, .. } => read::cmd_diff(file, &other, ctx),
+        // These are handled in main.rs before reaching dispatch
+        Command::Completions { .. }
+        | Command::Commands
+        | Command::Explain { .. }
+        | Command::Tree { .. }
+        | Command::Query { .. }
+        | Command::Validate { .. }
+        | Command::Convert { .. } => Ok(exit_code::OK),
     }
 }
 
-/// 运行 tree 命令
-pub fn run_tree(
-    file: &Path,
-    expand_all: bool,
-    path: Option<&str>,
-    json_output: bool,
-) {
-    use crate::engine::get;
+/// Map a `Command` variant to a static name string.
+fn cmd_static_name(cmd: &Command) -> &'static str {
+    match cmd {
+        Command::Get { .. } => "get",
+        Command::Keys { .. } => "keys",
+        Command::Len { .. } => "len",
+        Command::Type { .. } => "type",
+        Command::Exists { .. } => "exists",
+        Command::Schema { .. } => "schema",
+        Command::Check { .. } => "check",
+        Command::Set { .. } => "set",
+        Command::Del { .. } => "del",
+        Command::Add { .. } => "add",
+        Command::Patch { .. } => "patch",
+        Command::Mv { .. } => "mv",
+        Command::Fmt { .. } => "fmt",
+        Command::Fix { .. } => "fix",
+        Command::Minify { .. } => "minify",
+        Command::Diff { .. } => "diff",
+        Command::Tree { .. } => "tree",
+        Command::Query { .. } => "query",
+        Command::Validate { .. } => "validate",
+        Command::Convert { .. } => "convert",
+        Command::Commands => "commands",
+        Command::Explain { .. } => "explain",
+        Command::Completions { .. } => "completions",
+    }
+}
 
+// ── 独立运行的命令（在 main.rs 中调用） ───────────────────────────────────────
+
+/// 运行 tree 命令
+pub fn run_tree(file: &Path, expand_all: bool, path: Option<&str>, json: bool) {
+    let ctx = Ctx::new("tree", json);
     let locale = get_locale();
+    let file_str = file.display().to_string();
     let (doc, _) = match load_lenient(file) {
         Ok(v) => v,
         Err(e) => {
-            print_error(&t_to("err.parse_failed", &locale)
-                .replace("{0}", &file.display().to_string())
-                .replace("{1}", &e.to_string()), json_output);
+            let msg = t_to("err.parse_failed", &locale)
+                .replace("{0}", &file_str)
+                .replace("{1}", &e.to_string());
+            let fix = format!("Run 'jed fix {file_str}' to auto-repair JSON errors");
+            ctx.print_error(&msg, Some(&fix), &[format!("jed fix {file_str}")]);
             process::exit(exit_code::ERROR);
         }
     };
 
-    // 如果指定了路径，只显示子树
     let display_doc = if let Some(p) = path {
         match get(&doc, p) {
             Ok(v) => v.clone(),
             Err(e) => {
-                print_error(&format!("Path error: {}", e), json_output);
+                let fix = format!("Run 'jed keys . {file_str}' to list available paths");
+                ctx.print_error(
+                    &format!("Path error: {e}"),
+                    Some(&fix),
+                    &[format!("jed keys . {file_str}")],
+                );
                 process::exit(exit_code::NOT_FOUND);
             }
         }
@@ -117,157 +131,195 @@ pub fn run_tree(
         doc
     };
 
-    // 生成树形输出
-    let tree = render_tree(&display_doc, 0, expand_all);
-    print_ok(&tree, json_output);
+    let tree_lines = render_tree(&display_doc, 0, expand_all);
+    let actions = vec![format!("jed get <path> {file_str}")];
+    ctx.print_raw_with_actions(
+        serde_json::Value::Array(
+            tree_lines
+                .iter()
+                .map(|s| serde_json::Value::String(s.clone()))
+                .collect(),
+        ),
+        &actions,
+    );
 }
 
-fn render_tree(value: &JsonValue, depth: usize, expand_all: bool) -> String {
+fn render_tree(value: &JsonValue, depth: usize, expand_all: bool) -> Vec<String> {
     let indent = "  ".repeat(depth);
+    let mut lines = Vec::new();
     match value {
         JsonValue::Object(map) => {
-            let mut output = String::new();
-            output.push_str(&format!("{} {{\n", indent));
-            for (_key, val) in map {
-                output.push_str(&render_tree(val, depth + 1, expand_all));
+            lines.push(format!("{indent}{{"));
+            for (key, val) in map {
+                if expand_all || !matches!(val, JsonValue::Object(_) | JsonValue::Array(_)) {
+                    for sub in render_tree(val, depth + 1, expand_all) {
+                        lines.push(format!("{indent}  {key}: {sub}"));
+                    }
+                } else {
+                    lines.push(format!("{indent}  {key}: ..."));
+                }
             }
-            output.push_str(&format!("{}}}\n", indent));
-            output
+            lines.push(format!("{indent}}}"));
         }
         JsonValue::Array(arr) => {
-            let mut output = String::new();
-            output.push_str(&format!("{} [\n", indent));
+            lines.push(format!("{indent}["));
             for val in arr {
-                output.push_str(&render_tree(val, depth + 1, expand_all));
+                for sub in render_tree(val, depth + 1, expand_all) {
+                    lines.push(sub);
+                }
             }
-            output.push_str(&format!("{}]\n", indent));
-            output
+            lines.push(format!("{indent}]"));
         }
-        _ => {
-            format!("{}{}\n", indent, value)
+        other => {
+            lines.push(format!("{indent}{other}"));
         }
     }
+    lines
 }
 
-/// 运行 query 命令
-pub fn run_query(file: &Path, filter: &str, json_output: bool) {
-    use crate::engine::get;
-
+/// 运行 query 命令（路径过滤，与 get 等价）
+pub fn run_query(file: &Path, filter: &str, json: bool) {
+    let ctx = Ctx::new("query", json);
     let locale = get_locale();
+    let file_str = file.display().to_string();
     let (doc, _) = match load_lenient(file) {
         Ok(v) => v,
         Err(e) => {
-            print_error(&t_to("err.parse_failed", &locale)
-                .replace("{0}", &file.display().to_string())
-                .replace("{1}", &e.to_string()), json_output);
+            let msg = t_to("err.parse_failed", &locale)
+                .replace("{0}", &file_str)
+                .replace("{1}", &e.to_string());
+            ctx.print_error(&msg, None, &[]);
             process::exit(exit_code::ERROR);
         }
     };
 
-    // 简单过滤：支持 .field 和 .arr[index] 语法
     match get(&doc, filter) {
         Ok(value) => {
-            print_json_value(value, json_output);
+            let actions = vec![format!("jed set {filter} <value> {file_str}")];
+            ctx.print_value_with_actions(value, &actions);
         }
         Err(e) => {
-            print_error(&format!("Query error: {}", e), json_output);
+            let fix = format!("Run 'jed keys . {file_str}' to list available paths");
+            ctx.print_error(
+                &format!("Query error: {e}"),
+                Some(&fix),
+                &[format!("jed keys . {file_str}")],
+            );
             process::exit(exit_code::NOT_FOUND);
         }
     }
 }
 
-/// 运行 validate 命令
-pub fn run_validate(file: &Path, schema_file: &Path, json_output: bool) {
-    // JSON Schema 验证（简化版本）
-    // TODO: 完整实现需要添加 jsonschema crate
+/// 运行 validate 命令（基础 JSON Schema 验证）
+pub fn run_validate(file: &Path, schema_file: &Path, json: bool) {
+    let ctx = Ctx::new("validate", json);
     let locale = get_locale();
+    let file_str = file.display().to_string();
 
-    // 读取 schema
     let schema_content = match fs::read_to_string(schema_file) {
         Ok(c) => c,
         Err(e) => {
-            print_error(&t_to("err.read_failed", &locale)
+            let msg = t_to("err.read_failed", &locale)
                 .replace("{0}", &schema_file.display().to_string())
-                .replace("{1}", &e.to_string()), json_output);
+                .replace("{1}", &e.to_string());
+            ctx.print_error(&msg, None, &[]);
             process::exit(exit_code::ERROR);
         }
     };
 
-    // 读取数据
     let (doc, _) = match load_lenient(file) {
         Ok(v) => v,
         Err(e) => {
-            print_error(&t_to("err.parse_failed", &locale)
-                .replace("{0}", &file.display().to_string())
-                .replace("{1}", &e.to_string()), json_output);
+            let msg = t_to("err.parse_failed", &locale)
+                .replace("{0}", &file_str)
+                .replace("{1}", &e.to_string());
+            let fix = format!("Run 'jed fix {file_str}' to auto-repair JSON errors");
+            ctx.print_error(&msg, Some(&fix), &[format!("jed fix {file_str}")]);
             process::exit(exit_code::ERROR);
         }
     };
 
-    // 简化验证：检查 schema 中的必填字段是否存在
-    // 完整实现需要使用 jsonschema crate
-    if let JsonValue::Object(schema_obj) = parse_json(&schema_content) {
-        if let JsonValue::Object(doc_obj) = &doc {
-            let required = schema_obj.get("required");
-            if let Some(required_arr) = required {
-                if let JsonValue::Array(reqs) = required_arr {
-                    let mut missing = Vec::new();
-                    for req in reqs {
-                        if let JsonValue::String(key) = req {
-                            if !doc_obj.contains_key(key) {
-                                missing.push(key.clone());
-                            }
-                        }
+    let schema_val = parse_json(&schema_content);
+    if let JsonValue::Object(schema_obj) = schema_val
+        && let JsonValue::Object(doc_obj) = &doc
+        && let Some(JsonValue::Array(reqs)) = schema_obj.get("required")
+    {
+            let missing: Vec<String> = reqs
+                .iter()
+                .filter_map(|r| {
+                    if let JsonValue::String(key) = r && !doc_obj.contains_key(key) {
+                        return Some(key.clone());
                     }
-                    if missing.is_empty() {
-                        print_ok("valid", json_output);
-                    } else {
-                        let err = format!("Missing required fields: {:?}", missing);
-                        print_error(&err, json_output);
-                        process::exit(exit_code::ERROR);
-                    }
-                    return;
-                }
+                    None
+                })
+                .collect();
+
+            if missing.is_empty() {
+                ctx.print_raw_with_actions(
+                    serde_json::json!({
+                        "valid": true,
+                        "warning": "Only 'required' field presence was checked. Full JSON Schema validation is not yet implemented."
+                    }),
+                    &[format!("jed check {file_str}")],
+                );
+            } else {
+                let fix = "Add the missing required fields to the JSON file";
+                ctx.print_error(
+                    &format!("Missing required fields: {missing:?}"),
+                    Some(fix),
+                    &[format!("jed set .<field> <value> {file_str}")],
+                );
+                process::exit(exit_code::ERROR);
             }
-        }
+        return;
     }
 
-    // 默认通过
-    print_ok("valid (basic check)", json_output);
+    // Fallback: no required fields in schema
+    ctx.print_raw(serde_json::json!({
+        "valid": true,
+        "warning": "Only 'required' field presence was checked. Full JSON Schema validation is not yet implemented."
+    }));
 }
 
-fn parse_json(s: &str) -> JsonValue {
-    use crate::engine::parse_lenient;
-    // 简单尝试解析，不处理错误
-    parse_lenient(s).map(|o| o.value).unwrap_or(JsonValue::Null)
-}
-
-/// 运行 convert 命令
-pub fn run_convert(file: &Path, format: &str, json_output: bool) {
+/// 运行 convert 命令（格式转换）
+pub fn run_convert(file: &Path, format: &str, json: bool) {
+    let ctx = Ctx::new("convert", json);
     let locale = get_locale();
+    let file_str = file.display().to_string();
     let (doc, _) = match load_lenient(file) {
         Ok(v) => v,
         Err(e) => {
-            print_error(&t_to("err.parse_failed", &locale)
-                .replace("{0}", &file.display().to_string())
-                .replace("{1}", &e.to_string()), json_output);
+            let msg = t_to("err.parse_failed", &locale)
+                .replace("{0}", &file_str)
+                .replace("{1}", &e.to_string());
+            ctx.print_error(&msg, None, &[]);
             process::exit(exit_code::ERROR);
         }
     };
 
     match format.to_lowercase().as_str() {
         "yaml" => {
-            // 简单 YAML 输出
             let yaml = to_yaml(&doc, 0);
-            println!("{}", yaml);
+            if ctx.json {
+                ctx.print_raw(serde_json::json!({"format": "yaml", "content": yaml}));
+            } else {
+                print!("{yaml}");
+            }
         }
         "toml" => {
-            // 简化 TOML 输出
-            print_error("TOML output requires 'toml' crate. Use --format yaml instead.", json_output);
+            ctx.print_error(
+                "TOML output is not yet implemented",
+                Some("Use '--format yaml' instead, or convert manually"),
+                &[format!("jed convert yaml {file_str}")],
+            );
             process::exit(exit_code::ERROR);
         }
-        _ => {
-            print_error(&format!("Unknown format: {}. Supported: yaml, toml", format), json_output);
+        other => {
+            ctx.print_error(
+                &format!("Unknown format: '{other}'. Supported: yaml"),
+                Some("Use '--format yaml' for YAML output"),
+                &[],
+            );
             process::exit(exit_code::ERROR);
         }
     }
@@ -276,104 +328,47 @@ pub fn run_convert(file: &Path, format: &str, json_output: bool) {
 fn to_yaml(value: &JsonValue, depth: usize) -> String {
     let indent = "  ".repeat(depth);
     match value {
-        JsonValue::Object(map) => {
-            let mut output = String::new();
-            for (key, val) in map {
-                output.push_str(&format!("{}{}:\n", indent, key));
-                output.push_str(&to_yaml(val, depth + 1));
-            }
-            output
-        }
-        JsonValue::Array(arr) => {
-            let mut output = String::new();
-            for val in arr {
-                output.push_str(&format!("{}-\n", indent));
-                output.push_str(&to_yaml(val, depth + 1));
-            }
-            output
-        }
-        JsonValue::String(s) => {
-            format!("{}: \"{}\"\n", indent, s)
-        }
-        JsonValue::Number(n) => {
-            format!("{}: {}\n", indent, n)
-        }
-        JsonValue::Bool(b) => {
-            format!("{}: {}\n", indent, b)
-        }
-        JsonValue::Null => {
-            format!("{}: null\n", indent)
-        }
-    }
-}
-
-// ── 输出帮助函数 ──────────────────────────────────────────────────────────────
-
-/// 输出一个 JSON 值。json 模式下包装为 `{"ok":true,"value":...}`。
-pub(crate) fn print_json_value(value: &JsonValue, json_output: bool) {
-    use crate::engine::format_compact;
-    let compact = format_compact(value);
-    if json_output {
-        println!("{{\"ok\":true,\"value\":{compact}}}");
-    } else {
-        println!("{compact}");
-    }
-}
-
-/// 输出纯字符串值。json 模式下包装为 `{"ok":true,"value":"..."}` (字符串类型)。
-pub(crate) fn print_str(value: &str, json_output: bool) {
-    if json_output {
-        println!("{}", serde_json::json!({"ok": true, "value": value}));
-    } else {
-        println!("{value}");
-    }
-}
-
-/// 输出整数值。json 模式下包装为 `{"ok":true,"value":n}`。
-pub(crate) fn print_usize(n: usize, json_output: bool) {
-    if json_output {
-        println!("{{\"ok\":true,\"value\":{n}}}");
-    } else {
-        println!("{n}");
-    }
-}
-
-/// 输出字符串列表。json 模式下包装为 `{"ok":true,"value":[...]}`。
-pub(crate) fn print_string_list(lines: &[String], json_output: bool) {
-    if json_output {
-        let arr: Vec<serde_json::Value> = lines
+        JsonValue::Object(map) => map
             .iter()
-            .map(|s| serde_json::Value::String(s.clone()))
-            .collect();
-        println!("{}", serde_json::json!({"ok": true, "value": arr}));
-    } else {
-        for line in lines {
-            println!("{line}");
-        }
+            .map(|(key, val)| match val {
+                JsonValue::Object(_) | JsonValue::Array(_) => {
+                    format!("{indent}{key}:\n{}", to_yaml(val, depth + 1))
+                }
+                _ => format!("{indent}{key}: {}\n", yaml_scalar(val)),
+            })
+            .collect(),
+        JsonValue::Array(arr) => arr
+            .iter()
+            .map(|val| match val {
+                JsonValue::Object(_) | JsonValue::Array(_) => {
+                    format!("{indent}-\n{}", to_yaml(val, depth + 1))
+                }
+                _ => format!("{indent}- {}\n", yaml_scalar(val)),
+            })
+            .collect(),
+        other => format!("{}\n", yaml_scalar(other)),
     }
 }
 
-/// 输出成功消息。json 模式下只输出 `{"ok":true}`。
-pub(crate) fn print_ok(msg: &str, json_output: bool) {
-    if json_output {
-        println!("{{\"ok\":true,\"value\":\"{msg}\"}}");
-    } else {
-        println!("{msg}");
+fn yaml_scalar(value: &JsonValue) -> String {
+    match value {
+        JsonValue::String(s) => format!("\"{s}\""),
+        JsonValue::Number(n) => n.to_string(),
+        JsonValue::Bool(b) => b.to_string(),
+        JsonValue::Null => "null".to_string(),
+        other => format!("{other}"),
     }
 }
 
-/// 输出错误消息。json 模式下输出到 stdout，普通模式输出到 stderr。
-pub(crate) fn print_error(msg: &str, json_output: bool) {
-    if json_output {
-        println!("{}", serde_json::json!({"ok": false, "error": msg}));
-    } else {
-        eprintln!("{msg}");
-    }
+fn parse_json(s: &str) -> JsonValue {
+    parse_lenient(s)
+        .map(|o| o.value)
+        .unwrap_or(JsonValue::Null)
 }
 
 // ── 文件 I/O 帮助函数 ─────────────────────────────────────────────────────────
 
-/// 读取文件内容，返回错误信息若文件不存在。
+/// 读取文件内容。
 pub(crate) fn read_file(path: &Path) -> Result<String, Box<dyn std::error::Error>> {
     let locale = get_locale();
     fs::read_to_string(path).map_err(|e| {
