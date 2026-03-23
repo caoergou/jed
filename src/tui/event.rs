@@ -6,7 +6,7 @@
 )]
 
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEventKind};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use super::app::{App, AppMode, ContextAction, StatusLevel};
 
@@ -28,6 +28,8 @@ fn handle_key(app: &mut App, key: KeyEvent) {
         AppMode::Edit { .. } => handle_edit(app, key),
         AppMode::EditKey { .. } => handle_edit_key(app, key),
         AppMode::ConfirmStripComments => handle_confirm(app, key),
+        AppMode::Help => handle_help(app, key),
+        AppMode::ConfirmQuit { .. } => handle_confirm_quit(app, key),
         AppMode::ConfirmSave { .. } => handle_confirm_save(app, key),
         AppMode::Search { .. } => handle_search(app, key),
         AppMode::AddNode { .. } => handle_add_node(app, key),
@@ -48,6 +50,32 @@ fn handle_normal(app: &mut App, key: KeyEvent) {
         (KeyCode::Down, _) => app.move_down(),
         (KeyCode::Left, _) => app.collapse_or_go_parent(),
         (KeyCode::Right, _) => app.expand_or_enter(),
+
+        // PageUp/PageDown: 快速滚动（大幅移动）
+        (KeyCode::PageUp, _) => {
+            let scroll_amount = 10;
+            app.cursor = app.cursor.saturating_sub(scroll_amount);
+            app.list_state.select(Some(app.cursor));
+        }
+        (KeyCode::PageDown, _) => {
+            let scroll_amount = 10;
+            let lines = app.tree_lines();
+            app.cursor = (app.cursor + scroll_amount).min(lines.len().saturating_sub(1));
+            app.list_state.select(Some(app.cursor));
+        }
+
+        // Home/End: 跳到首尾
+        (KeyCode::Home, _) => {
+            app.cursor = 0;
+            app.list_state.select(Some(0));
+        }
+        (KeyCode::End, _) => {
+            let lines = app.tree_lines();
+            if !lines.is_empty() {
+                app.cursor = lines.len() - 1;
+                app.list_state.select(Some(app.cursor));
+            }
+        }
 
         // Space 切换展开/折叠
         (KeyCode::Char(' '), _) => app.expand_or_toggle(),
@@ -85,33 +113,44 @@ fn handle_normal(app: &mut App, key: KeyEvent) {
             app.show_context_menu(5, (app.cursor as u16) + 1);
         }
 
-        // 帮助
+        // 帮助面板
         (KeyCode::F(1), _) => {
-            app.set_status(
-                " ↑↓:移动 ←:折叠 →/Space:展开 Enter:编辑 N:新建 Del:删除 Ctrl+S:保存 Ctrl+F:搜索 F1:帮助 ",
-                StatusLevel::Info,
-            );
+            if matches!(app.mode, AppMode::Help) {
+                app.mode = AppMode::Normal;
+            } else {
+                app.mode = AppMode::Help;
+            }
         }
 
-        // 退出：Ctrl+Q 两次强制退出（未修改时直接退出）
-        (KeyCode::Char('q'), KeyModifiers::CONTROL) => {
-            if app.modified {
-                // 检查是否是第二次按（上次状态是修改警告）
-                let is_warn = app.status.as_ref().is_some_and(|(_, level)| {
-                    *level == StatusLevel::Warn
-                });
-                if is_warn {
-                    // 强制退出，不保存
+        // 退出：Esc 两次，或未修改时直接 Esc
+        (KeyCode::Esc, _) => {
+            if !app.modified {
+                // 未修改时直接退出
+                app.should_quit = true;
+            } else {
+                // 已修改：检查是否是连续按两次 Esc
+                let now = Instant::now();
+                let is_double_escape = app.last_escape_time
+                    .map(|last| now.duration_since(last) < Duration::from_millis(500))
+                    .unwrap_or(false);
+
+                if is_double_escape {
+                    // 连续按两次，强制退出
                     app.should_quit = true;
                 } else {
-                    // 第一次提示
-                    app.set_status(
-                        " 文件已修改！Ctrl+S 保存，再按 Ctrl+Q 强制退出 ",
-                        StatusLevel::Warn,
-                    );
+                    // 第一次按，或超时了，显示确认对话框
+                    app.mode = AppMode::ConfirmQuit { last_was_escape: true };
+                    app.last_escape_time = Some(now);
                 }
-            } else {
+            }
+        }
+
+        // Ctrl+Q 仍然支持，作为退出的快捷方式
+        (KeyCode::Char('q'), KeyModifiers::CONTROL) => {
+            if !app.modified {
                 app.should_quit = true;
+            } else {
+                app.mode = AppMode::ConfirmQuit { last_was_escape: false };
             }
         }
 
@@ -238,6 +277,39 @@ fn handle_edit_key(app: &mut App, key: KeyEvent) {
         }
         KeyCode::End => {
             *cursor_pos = buffer.len();
+        }
+        _ => {}
+    }
+}
+
+// ── 帮助模式 ─────────────────────────────────────────────────────────────────
+
+fn handle_help(app: &mut App, key: KeyEvent) {
+    match key.code {
+        KeyCode::Esc | KeyCode::Enter | KeyCode::F(1) => {
+            app.mode = AppMode::Normal;
+        }
+        _ => {}
+    }
+}
+
+// ── 退出确认模式 ─────────────────────────────────────────────────────────────
+
+fn handle_confirm_quit(app: &mut App, key: KeyEvent) {
+    match key.code {
+        // Y: 保存并退出
+        KeyCode::Char('y') | KeyCode::Char('Y') | KeyCode::Enter => {
+            app.do_save();
+            app.should_quit = true;
+        }
+        // N: 不保存直接退出
+        KeyCode::Char('n') | KeyCode::Char('N') => {
+            app.should_quit = true;
+        }
+        // C / Esc: 取消
+        KeyCode::Char('c') | KeyCode::Char('C') | KeyCode::Esc => {
+            app.mode = AppMode::Normal;
+            app.last_escape_time = None;
         }
         _ => {}
     }
@@ -424,6 +496,30 @@ fn handle_context_menu(app: &mut App, key: KeyEvent) {
 // ── 鼠标处理 ─────────────────────────────────────────────────────────────────
 
 fn handle_mouse(app: &mut App, event: crossterm::event::MouseEvent) {
+    // 退出确认对话框的鼠标点击
+    if let AppMode::ConfirmQuit { .. } = &app.mode {
+        if event.kind == crossterm::event::MouseEventKind::Down(crossterm::event::MouseButton::Left) {
+            // 对话框位置在屏幕中央，宽度48，高度7
+            // 简化处理：根据列判断点击了哪个按钮
+            // [Y] 在列 10-20, [N] 在列 22-32, [C] 在列 36-44
+            if event.row > 0 && event.row < 20 {
+                let col = event.column as i32;
+                if col >= 10 && col < 20 {
+                    // [Y] 保存并退出
+                    app.do_save();
+                    app.should_quit = true;
+                } else if col >= 22 && col < 32 {
+                    // [N] 不保存退出
+                    app.should_quit = true;
+                } else if col >= 36 && col < 44 {
+                    // [C] 取消
+                    app.mode = AppMode::Normal;
+                }
+            }
+        }
+        return;
+    }
+
     // 如果在右键菜单模式下，处理菜单内的鼠标移动和点击
     if let AppMode::ContextMenu {
         mouse_x, mouse_y, ..

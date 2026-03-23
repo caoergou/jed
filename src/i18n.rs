@@ -2,8 +2,10 @@
 //!
 //! Supports English (en) and Chinese (zh-CN).
 //! Language detection: `JE_LANG` > `LC_ALL`/`LANG` > Default (en)
+//! Platform detection: Returns OS-specific modifier key names (Ctrl vs Cmd)
 
 use std::env;
+use std::env::consts::OS;
 
 /// Get the current locale with proper detection priority:
 /// 1. `JE_LANG` (explicit user setting)
@@ -48,6 +50,31 @@ fn normalize_locale(locale: &str) -> String {
 #[allow(dead_code)]
 pub fn supported_locales() -> Vec<&'static str> {
     vec!["en", "zh-CN", "zh-TW"]
+}
+
+/// Platform-specific modifier key display.
+/// Returns "Ctrl" on Windows/Linux, "⌘" on macOS.
+pub fn modifier_key() -> &'static str {
+    if OS == "macos" {
+        "⌘"
+    } else {
+        "Ctrl"
+    }
+}
+
+/// Platform-specific shortcut prefix.
+/// Returns "⌘" for macOS, "Ctrl" for others.
+pub fn modifier_key_shortcut() -> &'static str {
+    if OS == "macos" {
+        "⌘"
+    } else {
+        "Ctrl"
+    }
+}
+
+/// Check if the current platform is macOS.
+pub fn is_macos() -> bool {
+    OS == "macos"
 }
 
 /// Translate a key to the current locale.

@@ -44,6 +44,13 @@ pub enum AppMode {
     },
     /// 等待确认剥离注释。
     ConfirmStripComments,
+    /// 帮助面板。
+    Help,
+    /// 退出确认（文件已修改时）。
+    ConfirmQuit {
+        /// 上一次按键是否是 Escape（用于检测连续按两次）
+        last_was_escape: bool,
+    },
     /// 保存前预览 diff
     ConfirmSave {
         /// 原始内容（保存前的状态）
@@ -167,6 +174,8 @@ pub struct App {
     pub last_click_row: Option<usize>,
     // 右键菜单悬停支持
     pub menu_hover_row: Option<usize>,
+    // 退出确认：追踪上次按键是否是 Escape（用于检测连续按两次）
+    pub last_escape_time: Option<std::time::Instant>,
 }
 
 impl App {
@@ -211,6 +220,7 @@ impl App {
             last_click_time: None,
             last_click_row: None,
             menu_hover_row: None,
+            last_escape_time: None,
         })
     }
 
@@ -829,7 +839,7 @@ impl App {
         self.mode = AppMode::Normal;
     }
 
-    fn do_save(&mut self) {
+    pub fn do_save(&mut self) {
         let content = format_pretty(&self.doc, &FormatOptions::default());
         match crate::command::write_file_atomic(&self.file_path, &content) {
             Ok(()) => {

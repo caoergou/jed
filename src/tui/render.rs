@@ -7,12 +7,12 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Clear, List, ListItem, Paragraph},
+    widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Wrap},
 };
 
 use super::app::{App, AppMode, ContextAction, StatusLevel};
 use super::tree::TreeLine;
-use crate::i18n::{get_locale, t_to};
+use crate::i18n::{get_locale, modifier_key, t_to};
 
 /// 每帧的主渲染入口。
 pub fn render(frame: &mut Frame, app: &mut App) {
@@ -52,6 +52,16 @@ pub fn render(frame: &mut Frame, app: &mut App) {
     // 确认剥离注释覆盖层
     if matches!(app.mode, AppMode::ConfirmStripComments) {
         render_confirm_overlay(frame, area);
+    }
+
+    // 帮助面板覆盖层
+    if matches!(app.mode, AppMode::Help) {
+        render_help_panel(frame, area);
+    }
+
+    // 退出确认覆盖层
+    if matches!(app.mode, AppMode::ConfirmQuit { .. }) {
+        render_confirm_quit_overlay(frame, area);
     }
 
     // 保存预览覆盖层
@@ -104,7 +114,8 @@ fn render_tree(frame: &mut Frame, app: &mut App, area: Rect, lines: &[TreeLine])
         )
         .highlight_style(
             Style::default()
-                .bg(Color::DarkGray)
+                .bg(Color::Blue)
+                .fg(Color::White)
                 .add_modifier(Modifier::BOLD),
         );
 
@@ -195,19 +206,17 @@ fn render_statusbar(frame: &mut Frame, app: &App, area: Rect, _lines: &[TreeLine
 
 /// 底部快捷键提示条
 fn render_helpbar(frame: &mut Frame, app: &App, area: Rect) {
+    let mod_key = modifier_key();
+    let save_key = format!("{}+S", mod_key);
     let hints = match &app.mode {
         AppMode::Normal => vec![
-            ("↑↓", "移动"),
-            ("Enter", "编辑"),
-            ("Space", "展开/折叠"),
-            ("N", "新建"),
-            ("Del", "删除"),
-            ("/", "搜索"),
-            ("Ctrl+S", "保存"),
-            ("Ctrl+Z", "撤销"),
-            ("Ctrl+R", "重做"),
-            ("Ctrl+Q", "退出×2"),
-            ("F1", "帮助"),
+            ("[↑↓]", "移动"),
+            ("[Enter]", "编辑"),
+            ("[Space]", "展开"),
+            ("[N]", "新建"),
+            ("[/]", "搜索"),
+            (&save_key, "保存"),
+            ("[F1]", "帮助"),
         ],
         AppMode::Edit { value_type, .. } => {
             if *value_type == "boolean" {
@@ -238,6 +247,14 @@ fn render_helpbar(frame: &mut Frame, app: &App, area: Rect) {
         AppMode::ConfirmStripComments => vec![
             ("Y", "确认"),
             ("N", "取消"),
+        ],
+        AppMode::Help => vec![
+            ("F1/Esc", "关闭"),
+        ],
+        AppMode::ConfirmQuit { .. } => vec![
+            ("[Y]", "保存退出"),
+            ("[N]", "不保存退出"),
+            ("[C]/Esc", "取消"),
         ],
         AppMode::ConfirmSave { .. } => vec![
             ("Enter", "保存"),
@@ -518,6 +535,125 @@ fn render_confirm_overlay(frame: &mut Frame, area: Rect) {
     frame.render_widget(para, overlay_area);
 }
 
+// ── 退出确认覆盖层 ───────────────────────────────────────────────────────────
+
+fn render_confirm_quit_overlay(frame: &mut Frame, area: Rect) {
+    let overlay_height = 7u16;
+    let overlay_width = 48u16;
+
+    if area.height < overlay_height + 2 || area.width < overlay_width + 2 {
+        return;
+    }
+
+    let overlay_area = Rect {
+        x: area.x + (area.width - overlay_width) / 2,
+        y: area.y + (area.height - overlay_height) / 2,
+        width: overlay_width,
+        height: overlay_height,
+    };
+
+    frame.render_widget(Clear, overlay_area);
+
+    let msg = vec![
+        Line::from(""),
+        Line::from(Span::styled(
+            "  文件已修改，是否保存？",
+            Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+        )),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled(" [ Y ] ", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+            Span::styled("保存并退出   ", Style::default().fg(Color::White)),
+            Span::styled(" [ N ] ", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)),
+            Span::styled("不保存退出   ", Style::default().fg(Color::White)),
+            Span::styled(" [ C ] ", Style::default().fg(Color::DarkGray).add_modifier(Modifier::BOLD)),
+            Span::styled("取消", Style::default().fg(Color::White)),
+        ]),
+    ];
+
+    let para = Paragraph::new(msg)
+        .block(
+            Block::default()
+                .title(" 退出确认 ")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Yellow)),
+        )
+        .style(Style::default().fg(Color::White));
+
+    frame.render_widget(para, overlay_area);
+}
+
+// ── 帮助面板覆盖层 ───────────────────────────────────────────────────────────
+
+fn render_help_panel(frame: &mut Frame, area: Rect) {
+    let mod_key = modifier_key();
+    let save_key = format!("{}+S", mod_key).replace("+", "");
+    let undo_key = format!("{}+Z", mod_key).replace("+", "");
+    let redo_key = format!("{}+Y", mod_key).replace("+", "");
+    let quit_key = format!("{}+Q", mod_key).replace("+", "");
+
+    let overlay_width = 50u16;
+    let overlay_height = 21u16;
+
+    if area.height < overlay_height + 2 || area.width < overlay_width + 2 {
+        return;
+    }
+
+    let overlay_area = Rect {
+        x: area.x + (area.width - overlay_width) / 2,
+        y: area.y + (area.height - overlay_height) / 2,
+        width: overlay_width,
+        height: overlay_height,
+    };
+
+    frame.render_widget(Clear, overlay_area);
+
+    // 预创建带快捷键的字符串
+    let save_line = format!("    [{:^8}]      保存", save_key);
+    let undo_line = format!("    [{:^8}]      撤销", undo_key);
+    let redo_line = format!("    [{:^8}]      重做", redo_key);
+    let quit_line = format!("    [{:^8}]      退出 (连续按两次)", quit_key);
+
+    let help_content: Vec<Line> = vec![
+        Line::from(""),
+        Line::from(Span::styled("  快捷键帮助", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD).add_modifier(Modifier::UNDERLINED))),
+        Line::from(""),
+        Line::from(Span::styled("  导航", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))),
+        Line::from(Span::styled("    [↑] / [↓]      上下移动", Style::default().fg(Color::White))),
+        Line::from(Span::styled("    [←] / [→]      折叠 / 展开或进入子节点", Style::default().fg(Color::White))),
+        Line::from(Span::styled("    [Space]        切换展开 / 折叠", Style::default().fg(Color::White))),
+        Line::from(Span::styled("    [PgUp]/[PgDn]  快速滚动 (一次10行)", Style::default().fg(Color::White))),
+        Line::from(Span::styled("    [Home]/[End]   跳到开头 / 末尾", Style::default().fg(Color::White))),
+        Line::from(""),
+        Line::from(Span::styled("  编辑", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))),
+        Line::from(Span::styled("    [Enter]        编辑值 / 展开节点", Style::default().fg(Color::White))),
+        Line::from(Span::styled("    [N]            新建节点", Style::default().fg(Color::White))),
+        Line::from(Span::styled("    [Delete]       删除节点", Style::default().fg(Color::White))),
+        Line::from(Span::styled("    [Tab]          编辑布尔值时切换 true/false", Style::default().fg(Color::White))),
+        Line::from(""),
+        Line::from(Span::styled("  文件", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))),
+        Line::from(Span::styled("    [/]            搜索", Style::default().fg(Color::White))),
+        Line::from(Span::styled(save_line, Style::default().fg(Color::White))),
+        Line::from(Span::styled(undo_line, Style::default().fg(Color::White))),
+        Line::from(Span::styled(redo_line, Style::default().fg(Color::White))),
+        Line::from(Span::styled(quit_line, Style::default().fg(Color::White))),
+        Line::from(""),
+        Line::from(Span::styled("  按 [F1] / [Esc] / [Enter] 关闭帮助", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))),
+    ];
+
+    let para = Paragraph::new(help_content)
+        .block(
+            Block::default()
+                .title(" 帮助 ")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Cyan)),
+        )
+        .style(Style::default().fg(Color::White))
+        .wrap(Wrap { trim: true });
+
+    frame.render_widget(para, overlay_area);
+}
+
 // ── 保存预览覆盖层 ───────────────────────────────────────────────────────────
 
 fn render_save_preview(frame: &mut Frame, app: &App, area: Rect) {
@@ -620,7 +756,8 @@ fn render_context_menu(frame: &mut Frame, app: &App, area: Rect) {
     };
 
     let actions = ContextAction::all();
-    let menu_width = 28u16;
+    // 菜单宽度增加以容纳快捷键提示
+    let menu_width = 34u16;
     let menu_height = actions.len() as u16 + 2;
 
     // 菜单位置：鼠标点击位置（减去一些偏移让菜单在点击位置下方/旁边）
@@ -647,12 +784,27 @@ fn render_context_menu(frame: &mut Frame, app: &App, area: Rect) {
     // 悬停效果优先于键盘选中
     let hover_row = app.menu_hover_row;
 
+    // 快捷键映射
+    let shortcuts = [
+        ("E", "dit"),
+        ("A", "ddChild"),
+        ("S", "ddSibling"),
+        ("D", "elete"),
+        ("C", "opyKey"),
+        ("V", "opyValue"),
+        ("P", "opyPath"),
+        ("*", "xpandAll"),
+        ("-", "ollapseAll"),
+    ];
+
     let items: Vec<ListItem> = actions
         .iter()
         .enumerate()
         .map(|(i, action)| {
             let is_hovered = hover_row == Some(i);
             let is_selected = hover_row.is_none() && i == *selected;
+
+            let (shortcut, _rest) = shortcuts[i];
 
             let style = if is_hovered {
                 Style::default()
@@ -667,7 +819,22 @@ fn render_context_menu(frame: &mut Frame, app: &App, area: Rect) {
             } else {
                 Style::default().fg(Color::White)
             };
-            ListItem::new(Span::styled(action.label(), style))
+
+            // 构建菜单项：快捷键用黄色突出，标签用白色
+            let label = action.label();
+
+            // 快捷键部分用黄色，标签部分用当前样式
+            let spans = vec![
+                Span::styled(
+                    format!("[{}]", shortcut),
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(format!(" {}", label), style),
+            ];
+
+            ListItem::new(Line::from(spans))
         })
         .collect();
 
