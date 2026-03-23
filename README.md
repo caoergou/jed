@@ -1,9 +1,9 @@
-# Jed — JSON Editor
+# Jed — JSON Config Editor
 
-A dual-interface JSON tool built for **humans and AI agents** alike.
+Edit JSON configs without the struggle — **interactive TUI for humans**, **agent-optimized CLI for AI**.
 
-- **Humans** get a full TUI with tree navigation, inline editing, and syntax highlighting.
-- **AI Agents** get path-based CLI commands with minimal token output.
+- **Humans**: Visual tree navigation, inline editing, syntax highlighting, auto-repair
+- **AI Agents**: Minimal-token output, crash-safe writes, batch operations
 
 Same binary. Two modes. One engine.
 
@@ -19,9 +19,13 @@ Same binary. Two modes. One engine.
 jed config.json
 
 # Command mode (agent / script)
+jed get .name config.json
+jed set .name '"Bob"' config.json
+jed fix --strip-comments config.json
+
+# Both argument orders are supported
 jed config.json get .name
-jed config.json set .name '"Bob"'
-jed config.json fix --strip-comments
+jed get .name config.json
 ```
 
 ---
@@ -81,8 +85,8 @@ jed settings.json
 | `Ctrl+F` / `/` | Search |
 | `Ctrl+Z` | Undo |
 | `Ctrl+Y` | Redo |
-| `F2` | Context menu |
 | `F1` | Help |
+| `q` | Quit (prompts if unsaved) |
 
 ---
 
@@ -93,41 +97,72 @@ Designed for **AI agents** to read and write JSON with minimal token usage.
 ### Read
 
 ```bash
-jed file.json get .key              # get value at path
-jed file.json get '.servers[0].host'
-jed file.json keys .                # list all top-level keys
-jed file.json len .tags             # array / object length
-jed file.json type .count           # type name: string|number|boolean|null|object|array
-jed file.json exists .key           # exit 0=exists, 2=not found
-jed file.json schema                # infer structure (no values)
-jed file.json check                 # validate; errors to stderr
+jed get .key file.json              # get value at path
+jed get '.servers[0].host' file.json
+jed keys . file.json                # list all top-level keys
+jed len .tags file.json             # array / object length
+jed type .count file.json           # type name: string|number|boolean|null|object|array
+jed exists .key file.json           # exit 0=exists, 2=not found
+jed schema file.json                # infer structure (no values)
+jed check file.json                 # validate; errors to stderr
 ```
 
 ### Write
 
 ```bash
-jed file.json set .name '"Bob"'     # set value
-jed file.json del .legacy           # delete key
-jed file.json add .tags '"go"'      # append to array
-jed file.json mv .oldKey .newKey    # rename key
+jed set .name '"Bob"' file.json     # set value
+jed del .legacy file.json           # delete key
+jed add .tags '"go"' file.json      # append to array
+jed mv .oldKey .newKey file.json    # rename key
 
 # Batch (JSON Patch RFC 6902) — one call, atomic
-jed file.json patch '[
+jed patch '[
   {"op": "replace", "path": ".name",    "value": "Bob"},
   {"op": "add",     "path": ".tags/-",  "value": "go"},
   {"op": "remove",  "path": ".legacy"}
-]'
+]' file.json
 ```
 
 ### Format / Repair
 
 ```bash
-jed file.json fmt                   # pretty-print in place
-jed file.json fix --strip-comments  # auto-fix JSONC, trailing commas, etc.
-jed file.json fix --dry-run         # preview repairs without writing
-jed file.json minify                # compact JSON
-jed file.json diff other.json       # structural diff
+jed fmt file.json                   # pretty-print in place
+jed fix --strip-comments file.json  # auto-fix JSONC, trailing commas, etc.
+jed fix --dry-run file.json         # preview repairs without writing
+jed minify file.json                # compact JSON
+jed diff old.json new.json          # structural diff
 ```
+
+### Inspect / Convert
+
+```bash
+jed tree file.json                  # display as indented tree
+jed tree -e file.json               # expand all nodes
+jed tree -p .servers file.json      # tree view of a sub-path
+jed query '.users[0]' file.json     # alias for get, with path-filter semantics
+jed validate schema.json file.json  # validate against JSON Schema (required fields)
+jed convert yaml file.json          # convert to YAML
+```
+
+### Discovery
+
+```bash
+jed commands                        # list all available commands
+jed explain get                     # detailed help for a specific command
+jed completions bash                # generate shell completion script
+jed completions zsh
+jed completions fish
+```
+
+### Global options
+
+| Option | Description |
+|--------|-------------|
+| `--json` | Wrap all output as `{"ok":...,"value":...}` |
+| `--lang <lang>` | Output language: `en`, `zh-CN`, `zh-TW` |
+| `--quiet` | Suppress informational output |
+| `-h, --help` | Show help |
+| `-V, --version` | Show version |
 
 ### Exit codes
 
@@ -154,22 +189,22 @@ jed file.json diff other.json       # structural diff
 
 ```bash
 # 1. Check file structure without reading values
-jed ~/.claude/settings.json schema
+jed schema ~/.claude/settings.json
 
 # 2. Check if a server exists
-jed ~/.claude/settings.json exists .mcpServers.github
+jed exists .mcpServers.github ~/.claude/settings.json
 
 # 3. Read only the specific value needed
-jed ~/.claude/settings.json get .mcpServers.github.command
+jed get .mcpServers.github.command ~/.claude/settings.json
 
 # 4. Update a single field
-jed ~/.claude/settings.json set .mcpServers.github.env.TOKEN '"ghp_xxxx"'
+jed set .mcpServers.github.env.TOKEN '"ghp_xxxx"' ~/.claude/settings.json
 
 # 5. Batch update (one call)
-jed ~/.claude/settings.json patch '[
+jed patch '[
   {"op": "replace", "path": ".defaultMode", "value": "acceptEdits"},
   {"op": "add",     "path": ".mcpServers.github.enabled", "value": true}
-]'
+]' ~/.claude/settings.json
 ```
 
 ---
@@ -206,6 +241,17 @@ Uses jq-inspired path syntax:
 
 ---
 
+## Stdin / Pipe Support
+
+All read commands accept JSON from stdin when no file argument is given:
+
+```bash
+cat config.json | jed get .name
+echo '{"a":1}' | jed schema
+```
+
+---
+
 ## Building from Source
 
 ```bash
@@ -214,6 +260,28 @@ cd jed
 cargo build --release
 ./target/release/jed --version
 ```
+
+---
+
+## Roadmap
+
+### v1.x — Polish & Distribution
+- [ ] Shell completions documentation and testing (bash/zsh/fish)
+- [ ] `diff --json` structured output mode
+- [ ] TOML conversion (`jed convert toml`)
+- [ ] Full JSON Schema validation (beyond `required` field presence checking)
+- [ ] Package manager distribution: Homebrew, apt/deb, rpm
+
+### v2.x — Power Features
+- [ ] Interactive shell mode (`jed shell`) — persistent REPL for batch edits without reopening files
+- [ ] JSONC comment preservation on save (CST-based; currently stripped on write)
+- [ ] TUI mouse support
+- [ ] Large file optimization (virtual scroll for files > 1 MB)
+
+### v3.x — Long Term
+- [ ] Multi-file tabs in TUI
+- [ ] Watch mode: reload TUI on external file change
+- [ ] JSON Pointer (RFC 6901) as alternative path syntax
 
 ---
 

@@ -146,32 +146,53 @@ pub struct Repair {
 
 ### 分发逻辑（`command/mod.rs`）
 
+核心命令（get/set/fix 等）在 `dispatch()` 中处理；tree、query、validate、convert 等扩展命令在 `main.rs` 中直接调用对应的 `run_*` 函数，不经过 `dispatch()`。
+
 ```rust
-match args.subcommand {
-    Subcommand::Get { path }       => read::get(&doc, &path),
-    Subcommand::Set { path, val }  => write::set(&mut doc, &path, &val),
-    Subcommand::Fix { dry_run }    => repair::fix(&mut doc, dry_run),
+// command/mod.rs — 核心命令
+match cmd {
+    Command::Get { path, .. }  => read::cmd_get(file, &path, ctx),
+    Command::Set { path, .. }  => write::cmd_set(file, &path, &value, ctx),
+    Command::Fix { .. }        => repair::cmd_fix(file, dry_run, strip_comments, ctx),
     // ...
 }
+
+// main.rs — 扩展命令
+Some(Command::Tree { .. })     => command::run_tree(&f, expand_all, path, json),
+Some(Command::Validate { .. }) => command::run_validate(&f, schema, json),
+Some(Command::Convert { .. })  => command::run_convert(&f, format, json),
 ```
 
-### 输出层
+### 输出层（`output.rs`）
 
-所有命令处理器返回统一的 `CommandResult`：
+所有命令通过统一的 `Ctx` 结构输出结果：
 
 ```rust
-pub enum CommandResult {
-    Value(JsonValue),    // 用于 get、schema
-    Lines(Vec<String>),  // 用于 keys、diff
-    Ok,                  // 用于 set、del、fix 成功
-    Err(CommandError),
+pub struct Ctx {
+    pub cmd: &'static str,
+    pub json: bool,      // 是否使用 --json 包装格式
 }
 ```
 
-输出层根据选项格式化：
-- 默认：裸文本（值为字符串，`ok`，key 每行一个）
-- `--json`：包装为 `{"ok": true/false, "value": ..., "error": ...}`
-- `--compact`：值输出为压缩 JSON
+输出方法：
+- `ctx.print_value(v)` — 输出 JsonValue（字符串裸输出，对象/数组美化）
+- `ctx.print_raw(v)` — 直接输出 serde_json::Value
+- `ctx.print_error(msg, fix, actions)` — 错误输出，含修复建议和推荐命令
+- `ctx.print_raw_with_actions(v, actions)` — 带推荐后续操作的输出（Agent 友好）
+
+`--json` 模式下所有输出统一包装为：
+```json
+{"ok": true/false, "value": ..., "error": "...", "actions": [...]}
+```
+
+### i18n（`i18n.rs`）
+
+通过 `JE_LANG` 环境变量（或 `--lang` 选项）控制输出语言。支持 `en`、`zh-CN`、`zh-TW`。
+翻译字符串以静态映射存储，零运行时依赖。
+
+### stdin 支持（`main.rs`）
+
+当文件参数为 `-`（默认值）时，从 stdin 读取内容，写入 `tempfile` 临时文件，再传给命令处理器。临时文件通过 `keep()` 保留到进程退出。
 
 ### 原子文件写入
 
@@ -300,4 +321,4 @@ pub struct TreeLine {
 | 1 MB     | < 200ms  | < 20ms    | < 100ms   |
 | 10 MB    | < 1s     | < 50ms    | < 500ms   |
 
-文件超过 1MB 时，TUI 使用虚拟滚动（只渲染可见行）。
+> 大文件（> 1MB）的 TUI 虚拟滚动尚未实现，列为 Roadmap v2.x 目标。
