@@ -179,46 +179,13 @@ pub fn t_to(key: &str, locale: &str) -> String {
         "tui.action.collapse_all" => tr(locale, "折叠全部", "Collapse All"),
 
         // TUI hints
-        "tui.hint.normal" => tr(
-            locale,
-            " Alt:菜单 ↑↓:移动 ←:折叠 →/Space:展开 Enter:编辑 N:新建 Del:删除 Ctrl+S:保存 Ctrl+F:搜索 ",
-            " Alt:Menu ↑↓:Move ←:Collapse →/Space:Expand Enter:Edit N:New Del:Delete Ctrl+S:Save Ctrl+F:Search ",
-        ),
-        "tui.hint.edit" => tr(
-            locale,
-            " 输入值  Enter:确认  Esc:取消",
-            " Enter value  Enter:Confirm  Esc:Cancel",
-        ),
-        "tui.hint.edit_key" => tr(
-            locale,
-            " 输入新键名  Enter:确认  Esc:取消",
-            " Enter new key  Enter:Confirm  Esc:Cancel",
-        ),
-        "tui.hint.search" => tr(
-            locale,
-            " 输入搜索  Enter:跳转下一匹配  Esc:退出",
-            " Enter search  Enter:Next match  Esc:Exit",
-        ),
-        "tui.hint.add_node" => tr(
-            locale,
-            " 输入字段名  Enter:确认  Esc:取消",
-            " Enter field name  Enter:Confirm  Esc:Cancel",
-        ),
-        "tui.hint.confirm_strip" => tr(
-            locale,
-            " [Y]:确认保存  [N]:取消  ",
-            " [Y]:Confirm  [N]:Cancel  ",
-        ),
         "tui.hint.context_menu" => tr(
             locale,
             " ↑↓:选择  Enter:执行  F2:菜单  Esc:退出",
             " ↑↓:Select  Enter:Execute  F2:Menu  Esc:Exit",
         ),
-        "tui.hint.help" => tr(
-            locale,
-            " ↑↓:移动 ←:折叠 →/Space:展开 Enter:编辑 N:新建 Del:删除 Ctrl+S:保存 Ctrl+F:搜索 F1:帮助 ",
-            " ↑↓:Move ←:Collapse →/Space:Expand Enter:Edit N:New Del:Delete Ctrl+S:Save Ctrl+F:Search F1:Help ",
-        ),
+        "tui.hint.menu" => tr(locale, "菜单", "Menu"),
+        "tui.hint.help" | "tui.help.title" => tr(locale, "帮助", "Help"),
         "tui.hint.move" => tr(locale, "移动", "Move"),
         "tui.hint.expand" => tr(locale, "展开", "Expand"),
         "tui.hint.new" => tr(locale, "新建", "New"),
@@ -328,7 +295,6 @@ pub fn t_to(key: &str, locale: &str) -> String {
         "tui.confirm.actions" => tr(locale, " Actions ", " Actions "),
 
         // Help panel
-        "tui.help.title" => tr(locale, "帮助", "Help"),
         "tui.help.help_title" => tr(locale, "快捷键帮助", "Keyboard Shortcuts"),
         "tui.help.nav" => tr(locale, "导航", "Navigation"),
         "tui.help.file" => tr(locale, "文件", "File"),

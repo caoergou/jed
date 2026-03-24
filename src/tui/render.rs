@@ -223,15 +223,16 @@ fn render_helpbar(frame: &mut Frame, app: &App, area: Rect) {
         "Ctrl"
     };
 
-    // 使用格式化后的键位
+    // 使用格式化后的键位 - Normal 模式下只显示核心快捷键，更多快捷键请按 F1
     let hints: Vec<(String, String)> = match &app.mode {
         AppMode::Normal => vec![
             (key("↑↓"), t_to("tui.hint.move", &locale)),
-            (key("Enter"), t_to("tui.hint.edit", &locale)),
-            (key("Space"), t_to("tui.hint.expand", &locale)),
+            (key("Enter"), t_to("tui.help.edit_value", &locale)),
             (key("N"), t_to("tui.hint.new", &locale)),
-            (key("/"), t_to("tui.hint.search_key", &locale)),
+            (key("+"), t_to("tui.action.expand_all", &locale)),
+            (key("-"), t_to("tui.action.collapse_all", &locale)),
             (combo(ctrl, "S"), t_to("tui.hint.save", &locale)),
+            (key("F2"), t_to("tui.hint.menu", &locale)),
             (key("F1"), t_to("tui.hint.help", &locale)),
         ],
         AppMode::Edit { value_type, .. } => {
@@ -280,7 +281,7 @@ fn render_helpbar(frame: &mut Frame, app: &App, area: Rect) {
     let mut spans: Vec<Span> = Vec::new();
     for (i, (key, desc)) in hints.iter().enumerate() {
         if i > 0 {
-            spans.push(Span::styled("  ", Style::default().fg(Color::DarkGray)));
+            spans.push(Span::styled("  ", Style::default().fg(Color::White)));
         }
         spans.push(Span::styled(
             key.clone(), // key 已包含 [ ] 括号
@@ -290,7 +291,7 @@ fn render_helpbar(frame: &mut Frame, app: &App, area: Rect) {
         ));
         spans.push(Span::styled(
             format!(" {desc}"),
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(Color::White),
         ));
     }
 
@@ -660,6 +661,9 @@ fn render_confirm_quit_overlay(frame: &mut Frame, area: Rect) {
 
 // ── 帮助面板覆盖层 ───────────────────────────────────────────────────────────
 
+/// 固定的快捷键列宽度（字符数），用于表格对齐
+const KEY_COL_WIDTH: usize = 14;
+
 fn render_help_panel(frame: &mut Frame, area: Rect) {
     let locale = get_locale();
 
@@ -686,9 +690,10 @@ fn render_help_panel(frame: &mut Frame, area: Rect) {
     let delete_node = t_to("tui.help.delete_node", &locale);
     let toggle_bool = t_to("tui.help.toggle_bool", &locale);
     let search = t_to("tui.help.search", &locale);
+    let menu = t_to("tui.hint.menu", &locale);
 
-    let overlay_width = 50u16;
-    let overlay_height = 21u16;
+    let overlay_width = 52u16;
+    let overlay_height = 24u16;
 
     if area.height < overlay_height + 2 || area.width < overlay_width + 2 {
         return;
@@ -703,8 +708,15 @@ fn render_help_panel(frame: &mut Frame, area: Rect) {
 
     frame.render_widget(Clear, overlay_area);
 
+    // 获取修饰键文本
+    let ctrl = if cfg!(target_os = "macos") {
+        "⌘"
+    } else {
+        "Ctrl"
+    };
+
     // 辅助函数：创建带颜色的快捷键 span
-    let key = |k: &str| -> Span<'static> {
+    let key_span = |k: &str| -> Span<'static> {
         Span::styled(
             format!("[{k}]"),
             Style::default()
@@ -713,8 +725,8 @@ fn render_help_panel(frame: &mut Frame, area: Rect) {
         )
     };
 
-    // 辅助函数：创建组合键（使用 [Ctrl]+[C] 格式）
-    let combo = |c: &str, k: &str| -> Span<'static> {
+    // 辅助函数：创建组合键 span
+    let combo_span = |c: &str, k: &str| -> Span<'static> {
         Span::styled(
             format!("[{c}]+[{}]", k.to_uppercase()),
             Style::default()
@@ -723,35 +735,26 @@ fn render_help_panel(frame: &mut Frame, area: Rect) {
         )
     };
 
-    // 获取修饰键文本
-    let ctrl = if cfg!(target_os = "macos") {
-        "⌘"
-    } else {
-        "Ctrl"
+    // 辅助函数：创建表格行，固定快捷键列宽度
+    let help_row = |key: Span<'static>, desc: String| -> Line<'static> {
+        let key_text = extract_text(&key);
+        let padding = KEY_COL_WIDTH.saturating_sub(key_text.len());
+        Line::from(vec![
+            Span::raw("  "),
+            key,
+            Span::raw(" ".repeat(padding)),
+            Span::styled(desc, Style::default().fg(Color::White)),
+        ])
     };
 
-    // 辅助宏：创建表格化的帮助行
-    macro_rules! help_row {
-        ($key_str:expr, $desc:expr, $is_combo:expr) => {{
-            let key_span = if $is_combo {
-                combo(ctrl, $key_str)
-            } else {
-                key($key_str)
-            };
-            let key_len = if $is_combo {
-                $key_str.len() + ctrl.len() + 4 // [Ctrl]+[X]
-            } else {
-                $key_str.len() + 2 // [X]
-            };
-            let padding = 12usize.saturating_sub(key_len);
-            Line::from(vec![
-                Span::raw("  "),
-                key_span,
-                Span::raw(" ".repeat(padding)),
-                Span::styled($desc, Style::default().fg(Color::White)),
-            ])
-        }};
-    }
+    // 辅助函数：创建普通快捷键行
+    let key_row =
+        |k: &str, desc: &str| -> Line<'static> { help_row(key_span(k), desc.to_string()) };
+
+    // 辅助函数：创建组合键行
+    let combo_row = |c: &str, k: &str, desc: &str| -> Line<'static> {
+        help_row(combo_span(c, k), desc.to_string())
+    };
 
     let help_content: Vec<Line> = vec![
         Line::from(""),
@@ -769,16 +772,11 @@ fn render_help_panel(frame: &mut Frame, area: Rect) {
                 .fg(Color::Yellow)
                 .add_modifier(Modifier::BOLD),
         )),
-        // up/down
-        help_row!("↑/↓", &move_up_down, false),
-        // left/right
-        help_row!("←/→", &collapse_expand, false),
-        // space
-        help_row!("Space", &toggle_expand, false),
-        // PgUp/PgDn
-        help_row!("PgUp/PgDn", &quick_scroll, false),
-        // Home/End
-        help_row!("Home/End", &jump_begin_end, false),
+        key_row("↑/↓", &move_up_down),
+        key_row("←/→", &collapse_expand),
+        key_row("Space", &toggle_expand),
+        key_row("PgUp/PgDn", &quick_scroll),
+        key_row("Home/End", &jump_begin_end),
         Line::from(""),
         Line::from(Span::styled(
             format!("  {edit}"),
@@ -786,14 +784,10 @@ fn render_help_panel(frame: &mut Frame, area: Rect) {
                 .fg(Color::Yellow)
                 .add_modifier(Modifier::BOLD),
         )),
-        // Enter
-        help_row!("Enter", &edit_value, false),
-        // N
-        help_row!("N", &new_node, false),
-        // Delete
-        help_row!("Del", &delete_node, false),
-        // Tab
-        help_row!("Tab", &toggle_bool, false),
+        key_row("Enter", &edit_value),
+        key_row("N", &new_node),
+        key_row("Del", &delete_node),
+        key_row("Tab", &toggle_bool),
         Line::from(""),
         Line::from(Span::styled(
             format!("  {file}"),
@@ -801,16 +795,12 @@ fn render_help_panel(frame: &mut Frame, area: Rect) {
                 .fg(Color::Yellow)
                 .add_modifier(Modifier::BOLD),
         )),
-        // /
-        help_row!("/", &search, false),
-        // Ctrl+S
-        help_row!("S", &save, true),
-        // Ctrl+Z
-        help_row!("Z", &undo, true),
-        // Ctrl+Y
-        help_row!("Y", &redo, true),
-        // Ctrl+Q
-        help_row!("Q", &quit, true),
+        key_row("/", &search),
+        key_row("F2", &menu),
+        combo_row(ctrl, "S", &save),
+        combo_row(ctrl, "Z", &undo),
+        combo_row(ctrl, "Y", &redo),
+        combo_row(ctrl, "Q", &quit),
         Line::from(""),
         Line::from(Span::styled(
             close_help,
@@ -831,6 +821,11 @@ fn render_help_panel(frame: &mut Frame, area: Rect) {
         .wrap(Wrap { trim: true });
 
     frame.render_widget(para, overlay_area);
+}
+
+/// 从 Span 中提取文本内容（用于计算宽度）
+fn extract_text(span: &Span<'_>) -> String {
+    span.content.clone().into_owned()
 }
 
 // ── 保存预览覆盖层 ───────────────────────────────────────────────────────────
@@ -956,6 +951,7 @@ fn render_context_menu(frame: &mut Frame, app: &App, area: Rect) {
 
     let locale = get_locale();
     let actions = ContextAction::all();
+
     // 菜单宽度增加以容纳快捷键提示
     let menu_width = 34u16;
     let menu_height = actions.len() as u16 + 2;

@@ -8,7 +8,8 @@
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEventKind};
 use std::time::{Duration, Instant};
 
-use super::app::{App, AppMode, ContextAction};
+use super::app::{App, AppMode, ContextAction, StatusLevel};
+use crate::i18n::{get_locale, t_to};
 
 // 双击时间间隔（毫秒）
 const DOUBLE_CLICK_MS: u64 = 500;
@@ -98,6 +99,22 @@ fn handle_normal(app: &mut App, key: KeyEvent) {
 
         // 新建节点
         (KeyCode::Insert, _) | (KeyCode::Char('n'), _) => app.start_add_node(),
+
+        // 展开全部 / 折叠全部
+        (KeyCode::Char('+'), _) | (KeyCode::Char('='), _) => {
+            app.expand_all();
+            app.set_status(
+                &t_to("tui.status.expanded_all", &get_locale()),
+                StatusLevel::Info,
+            );
+        }
+        (KeyCode::Char('-'), _) => {
+            app.collapse_all();
+            app.set_status(
+                &t_to("tui.status.collapsed_all", &get_locale()),
+                StatusLevel::Info,
+            );
+        }
 
         // 撤销 / 重做
         (KeyCode::Char('z'), KeyModifiers::CONTROL) => app.undo(),
@@ -482,7 +499,7 @@ fn handle_context_menu(app: &mut App, key: KeyEvent) {
     let max = actions.len();
 
     match key.code {
-        KeyCode::Esc => {
+        KeyCode::Esc | KeyCode::F(2) => {
             app.close_context_menu();
         }
         KeyCode::Enter => {
@@ -490,12 +507,18 @@ fn handle_context_menu(app: &mut App, key: KeyEvent) {
             app.execute_context_action(action);
         }
         KeyCode::Up | KeyCode::Char('k') => {
-            if *selected > 0 {
+            // 循环导航：从顶部跳到底部
+            if *selected == 0 {
+                *selected = max - 1;
+            } else {
                 *selected -= 1;
             }
         }
         KeyCode::Down | KeyCode::Char('j') => {
-            if *selected + 1 < max {
+            // 循环导航：从底部跳到顶部
+            if *selected + 1 >= max {
+                *selected = 0;
+            } else {
                 *selected += 1;
             }
         }
@@ -507,8 +530,6 @@ fn handle_context_menu(app: &mut App, key: KeyEvent) {
         KeyCode::Char('c') => app.execute_context_action(ContextAction::CopyKey),
         KeyCode::Char('v') => app.execute_context_action(ContextAction::CopyValue),
         KeyCode::Char('p') => app.execute_context_action(ContextAction::CopyPath),
-        KeyCode::Char('*') => app.execute_context_action(ContextAction::ExpandAll),
-        KeyCode::Char('-') => app.execute_context_action(ContextAction::CollapseAll),
         _ => {}
     }
 }
@@ -516,6 +537,24 @@ fn handle_context_menu(app: &mut App, key: KeyEvent) {
 // ── 鼠标处理 ─────────────────────────────────────────────────────────────────
 
 fn handle_mouse(app: &mut App, event: crossterm::event::MouseEvent) {
+    // 编辑模式下的鼠标处理：点击编辑框外部取消编辑
+    if matches!(
+        app.mode,
+        AppMode::Edit { .. }
+            | AppMode::EditKey { .. }
+            | AppMode::Search { .. }
+            | AppMode::AddNode { .. }
+    ) {
+        if event.kind == crossterm::event::MouseEventKind::Down(crossterm::event::MouseButton::Left)
+        {
+            // 点击编辑框外部，取消编辑
+            // 编辑框在底部，简化处理：点击编辑框以外的区域取消
+            // 编辑框高度为 3，位于屏幕底部
+            app.mode = AppMode::Normal;
+        }
+        return;
+    }
+
     // 退出确认对话框的鼠标点击
     if let AppMode::ConfirmQuit { .. } = &app.mode {
         if event.kind == crossterm::event::MouseEventKind::Down(crossterm::event::MouseButton::Left)
@@ -568,7 +607,7 @@ fn handle_mouse(app: &mut App, event: crossterm::event::MouseEvent) {
     } = &app.mode
     {
         let actions = ContextAction::all();
-        let menu_width = 28i32;
+        let menu_width = 34i32;
         let menu_height = actions.len() as i32 + 2;
 
         // 先保存坐标，避免重复借用
@@ -588,14 +627,12 @@ fn handle_mouse(app: &mut App, event: crossterm::event::MouseEvent) {
             && click_y < menu_y + menu_height;
 
         if in_menu_area {
-            let diff = click_y - menu_y - 1;
-            let item_index = if diff < 0 {
-                0
-            } else {
-                usize::try_from(diff).unwrap_or(0)
-            };
-            if item_index < actions.len() {
-                app.menu_hover_row = Some(item_index);
+            let diff = click_y - menu_y - 1; // -1 是因为标题行
+            if diff >= 0 {
+                let item_index = usize::try_from(diff).unwrap_or(0);
+                if item_index < actions.len() {
+                    app.menu_hover_row = Some(item_index);
+                }
             }
         } else {
             app.menu_hover_row = None;
@@ -609,15 +646,13 @@ fn handle_mouse(app: &mut App, event: crossterm::event::MouseEvent) {
             if in_menu_area {
                 // 计算点击了哪一项（减去标题行）
                 let diff = click_y - menu_y - 1;
-                let item_index = if diff < 0 {
-                    0
-                } else {
-                    usize::try_from(diff).unwrap_or(0)
-                };
-                if item_index < actions.len() {
-                    let action = actions[item_index];
-                    app.execute_context_action(action);
-                    return;
+                if diff >= 0 {
+                    let item_index = usize::try_from(diff).unwrap_or(0);
+                    if item_index < actions.len() {
+                        let action = actions[item_index];
+                        app.execute_context_action(action);
+                        return;
+                    }
                 }
             }
             // 点击菜单外，关闭菜单

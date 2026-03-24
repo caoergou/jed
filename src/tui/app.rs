@@ -99,8 +99,6 @@ pub enum ContextAction {
     CopyKey,
     CopyValue,
     CopyPath,
-    ExpandAll,
-    CollapseAll,
 }
 
 impl ContextAction {
@@ -113,8 +111,6 @@ impl ContextAction {
             ContextAction::CopyKey,
             ContextAction::CopyValue,
             ContextAction::CopyPath,
-            ContextAction::ExpandAll,
-            ContextAction::CollapseAll,
         ]
     }
 
@@ -129,8 +125,6 @@ impl ContextAction {
             ContextAction::CopyKey => t_to("tui.action.copy_key", &locale),
             ContextAction::CopyValue => t_to("tui.action.copy_value", &locale),
             ContextAction::CopyPath => t_to("tui.action.copy_path", &locale),
-            ContextAction::ExpandAll => t_to("tui.action.expand_all", &locale),
-            ContextAction::CollapseAll => t_to("tui.action.collapse_all", &locale),
         }
     }
 
@@ -144,8 +138,6 @@ impl ContextAction {
             ContextAction::CopyKey => 'c',
             ContextAction::CopyValue => 'v',
             ContextAction::CopyPath => 'p',
-            ContextAction::ExpandAll => '*',
-            ContextAction::CollapseAll => '-',
         }
     }
 }
@@ -630,8 +622,6 @@ impl App {
             ContextAction::CopyKey => self.context_copy_key(),
             ContextAction::CopyValue => self.context_copy_value(),
             ContextAction::CopyPath => self.context_copy_path(),
-            ContextAction::ExpandAll => self.context_expand_all(),
-            ContextAction::CollapseAll => self.context_collapse_all(),
         }
     }
 
@@ -721,24 +711,6 @@ impl App {
         self.mode = AppMode::Normal;
     }
 
-    fn context_expand_all(&mut self) {
-        self.expand_all();
-        self.set_status(
-            &t_to("tui.status.expanded_all", &get_locale()),
-            StatusLevel::Info,
-        );
-        self.mode = AppMode::Normal;
-    }
-
-    fn context_collapse_all(&mut self) {
-        self.collapse_all();
-        self.set_status(
-            &t_to("tui.status.collapsed_all", &get_locale()),
-            StatusLevel::Info,
-        );
-        self.mode = AppMode::Normal;
-    }
-
     fn context_add_sibling(&mut self) {
         self.mode = AppMode::Normal;
         let lines = self.tree_lines();
@@ -820,8 +792,8 @@ impl App {
             match value {
                 JsonValue::Object(obj) => {
                     for (k, v) in obj {
-                        let new_path = if path.is_empty() {
-                            k.clone()
+                        let new_path = if path == "." {
+                            format!(".{k}")
                         } else {
                             format!("{path}.{k}")
                         };
@@ -844,7 +816,9 @@ impl App {
             }
         }
         let mut paths = Vec::new();
-        collect_paths(&self.doc, "", &mut paths);
+        // 根节点也需要展开
+        paths.push(".".to_string());
+        collect_paths(&self.doc, ".", &mut paths);
         for p in paths {
             self.expanded.insert(p);
         }
