@@ -388,6 +388,7 @@ impl App {
 
     /// 实时检测输入值的类型
     fn detect_value_type(input: &str) -> (Option<String>, Option<String>) {
+        let locale = get_locale();
         let trimmed = input.trim();
         if trimmed.is_empty() {
             return (Some("empty".to_string()), None);
@@ -408,7 +409,10 @@ impl App {
             }
             Err(e) => {
                 // 解析失败，作为字符串处理
-                (Some("string (未加引号)".to_string()), Some(e.to_string()))
+                (
+                    Some(t_to("tui.status.string_unquoted", &locale)),
+                    Some(e.to_string()),
+                )
             }
         }
     }

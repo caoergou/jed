@@ -71,6 +71,58 @@ pub fn is_macos() -> bool {
     OS == "macos"
 }
 
+/// Format a key for display with Unicode symbols.
+/// Transforms common keys into more visual representations:
+/// - Enter → ↵
+/// - Space → ␣
+/// - Escape/Esc → Esc
+/// - Tab → ⇥
+/// - Backspace → ⌫
+/// - Delete → Del
+/// - Up/Down/Left/Right → ↑↓←→
+/// - PageUp/PageDown → PgUp/PgDn
+/// - Home/End → Home/End
+/// Modifier keys: Ctrl → Ctrl/⌘, Shift → ⇧, Alt → ⌥ (platform-aware)
+pub fn format_key(key: &str) -> String {
+    match key.to_lowercase().as_str() {
+        "enter" => "↵".to_string(),
+        "space" => "␣".to_string(),
+        "escape" | "esc" => "Esc".to_string(),
+        "tab" => "⇥".to_string(),
+        "backspace" => "⌫".to_string(),
+        "delete" | "del" => "Del".to_string(),
+        "up" => "↑".to_string(),
+        "down" => "↓".to_string(),
+        "left" => "←".to_string(),
+        "right" => "→".to_string(),
+        "pageup" => "PgUp".to_string(),
+        "pagedown" => "PgDn".to_string(),
+        "home" => "Home".to_string(),
+        "end" => "End".to_string(),
+        "insert" => "Ins".to_string(),
+        // Modifier keys with platform awareness
+        "ctrl" | "control" => modifier_key().to_string(),
+        "shift" => "⇧".to_string(),
+        "alt" => "⌥".to_string(),
+        // Default: capitalize first letter
+        _ => {
+            let mut chars = key.chars();
+            match chars.next() {
+                None => String::new(),
+                Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+            }
+        }
+    }
+}
+
+/// Format a shortcut combination like "Ctrl+S" into "⌘+S" (macOS) or "Ctrl+S" (Linux/Windows)
+pub fn format_shortcut(keys: &str) -> String {
+    // Split by '+' and format each part
+    let parts: Vec<&str> = keys.split('+').collect();
+    let formatted: Vec<String> = parts.iter().map(|k| format_key(k)).collect();
+    formatted.join("+")
+}
+
 /// Translate a key to the current locale.
 #[allow(dead_code)]
 pub fn t(key: &str) -> String {
@@ -316,6 +368,32 @@ pub fn t_to(key: &str, locale: &str) -> String {
         "tui.overlay.rename_key" => tr(locale, " 重命名键 {0} ", " Rename Key {0} "),
         "tui.overlay.add_field" => tr(locale, " 添加字段到 {0} ", " Add Field to {0} "),
         "tui.overlay.search" => tr(locale, " 搜索 ", " Search "),
+        "tui.overlay.confirm_quit" => tr(locale, " 退出确认 ", " Confirm Quit "),
+        "tui.overlay.file_modified" => tr(
+            locale,
+            " 文件已修改，是否保存？",
+            " File modified. Save before quit? ",
+        ),
+        "tui.overlay.save_and_quit" => tr(locale, "保存并退出", "Save & Quit"),
+        "tui.overlay.quit_no_save" => tr(locale, "不保存退出", "Quit No Save"),
+        "tui.overlay.cancel" => tr(locale, "取消", "Cancel"),
+        "tui.overlay.type_mismatch" => tr(
+            locale,
+            "⚠ {0} (原类型: {1})",
+            "⚠ {0} (original: {1})",
+        ),
+        "tui.status.string_unquoted" => tr(
+            locale,
+            "string (未加引号)",
+            "string (unquoted)",
+        ),
+        "tui.hint.enter_confirm" => tr(locale, "确认", "Confirm"),
+        "tui.overlay.save_preview" => tr(locale, " 保存预览 ", " Save Preview "),
+        "tui.overlay.save_hint" => tr(
+            locale,
+            " [ Enter / Y ] 保存  [ Esc / N ] 取消",
+            " [ Enter / Y ] Save  [ Esc / N ] Cancel",
+        ),
         "tui.confirm.has_comments" => tr(
             locale,
             " 此文件含有注释（JSONC 格式）。",

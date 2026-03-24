@@ -510,6 +510,27 @@ fn handle_mouse(app: &mut App, event: crossterm::event::MouseEvent) {
         return;
     }
 
+    // 保存预览对话框的鼠标点击
+    if let AppMode::ConfirmSave { .. } = &app.mode {
+        if event.kind == crossterm::event::MouseEventKind::Down(crossterm::event::MouseButton::Left)
+        {
+            // 保存预览对话框位置在屏幕中央，宽度60，高度10
+            // 提示行内容: "  [ Enter / Y ] Save  [ Esc / N ] Cancel"
+            // 简化处理：[Y/Save] 在列 13-22, [N/Cancel] 在列 26-35
+            if event.row > 0 && event.row < 20 {
+                let col = event.column as i32;
+                if (13..22).contains(&col) {
+                    // [Y/Enter] 保存
+                    app.confirm_save();
+                } else if (26..35).contains(&col) {
+                    // [N/Esc] 取消
+                    app.cancel_save();
+                }
+            }
+        }
+        return;
+    }
+
     // 如果在右键菜单模式下，处理菜单内的鼠标移动和点击
     if let AppMode::ContextMenu {
         mouse_x, mouse_y, ..
