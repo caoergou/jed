@@ -1,5 +1,7 @@
 use std::collections::HashSet;
+use std::fs;
 use std::path::PathBuf;
+use std::time::SystemTime;
 
 use ratatui::widgets::ListState;
 
@@ -10,6 +12,9 @@ use crate::engine::{
 use crate::i18n::{get_locale, t_to};
 
 use super::tree::{TreeLine, flatten};
+use super::virtual_scroll::TreeLineCache;
+
+const LARGE_FILE_THRESHOLD_BYTES: u64 = 1_000_000;
 
 /// TUI 的交互模式。
 #[derive(Debug, Clone, PartialEq)]
@@ -128,7 +133,6 @@ impl ContextAction {
         }
     }
 
-    /// 获取操作对应的快捷键（单个字符）
     pub fn shortcut(self) -> char {
         match self {
             ContextAction::Edit => 'e',
@@ -142,6 +146,12 @@ impl ContextAction {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FileChangeType {
+    Modified,
+    Deleted,
+}
+
 /// 状态消息的级别。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StatusLevel {
@@ -150,7 +160,7 @@ pub enum StatusLevel {
     Error,
 }
 
-/// 应用整体状态。
+#[allow(clippy::struct_excessive_bools)]
 pub struct App {
     /// 文档树。
     pub doc: JsonValue,
@@ -185,13 +195,31 @@ pub struct App {
     pub menu_hover_row: Option<usize>,
     // 退出确认：追踪上次按键是否是 Escape（用于检测连续按两次）
     pub last_escape_time: Option<std::time::Instant>,
+
+    // 大文件优化
+    pub file_size: u64,
+    pub is_large_file: bool,
+    pub tree_line_cache: Option<TreeLineCache>,
+
+    // Watch 模式
+    pub watch_enabled: bool,
+    pub file_changed: Option<FileChangeType>,
+    pub last_modified: Option<SystemTime>,
 }
 
 impl App {
     /// 从文件路径创建 App，完成初始解析。
     pub fn from_file(path: PathBuf) -> Result<Self, Box<dyn std::error::Error>> {
         let locale = get_locale();
-        let content = std::fs::read_to_string(&path).map_err(|e| {
+        let metadata = fs::metadata(&path).map_err(|e| {
+            t_to("err.read_failed", &locale)
+                .replace("{0}", &path.display().to_string())
+                .replace("{1}", &e.to_string())
+        })?;
+        let file_size = metadata.len();
+        let last_modified = metadata.modified().ok();
+
+        let content = fs::read_to_string(&path).map_err(|e| {
             t_to("err.read_failed", &locale)
                 .replace("{0}", &path.display().to_string())
                 .replace("{1}", &e.to_string())
@@ -204,14 +232,18 @@ impl App {
                 .replace("{1}", &e.to_string())
         })?;
 
-        // 默认展开根节点
-        let mut expanded = HashSet::new();
-        if matches!(output.value, JsonValue::Object(_) | JsonValue::Array(_)) {
-            expanded.insert(".".into());
-        }
+        let is_large_file = file_size > LARGE_FILE_THRESHOLD_BYTES;
+
+        let expanded = Self::compute_initial_expanded(&output.value, is_large_file);
 
         let mut list_state = ListState::default();
         list_state.select(Some(0));
+
+        let tree_line_cache = if is_large_file {
+            Some(TreeLineCache::new(output.value.clone(), expanded.clone()))
+        } else {
+            None
+        };
 
         Ok(Self {
             doc: output.value,
@@ -230,12 +262,160 @@ impl App {
             last_click_row: None,
             menu_hover_row: None,
             last_escape_time: None,
+            file_size,
+            is_large_file,
+            tree_line_cache,
+            watch_enabled: true,
+            file_changed: None,
+            last_modified,
         })
     }
 
-    /// 生成当前的树形行列表。
+    fn compute_initial_expanded(doc: &JsonValue, is_large_file: bool) -> HashSet<String> {
+        let mut expanded = HashSet::new();
+        if matches!(doc, JsonValue::Object(_) | JsonValue::Array(_)) {
+            expanded.insert(".".into());
+
+            if is_large_file {
+                return expanded;
+            }
+
+            Self::auto_expand(doc, ".", 0, 2, &mut expanded);
+        }
+        expanded
+    }
+
+    fn auto_expand(
+        doc: &JsonValue,
+        path: &str,
+        depth: usize,
+        max_depth: usize,
+        expanded: &mut HashSet<String>,
+    ) {
+        if depth >= max_depth {
+            return;
+        }
+
+        match doc {
+            JsonValue::Object(map) => {
+                for (key, value) in map.iter().take(3) {
+                    let child_path = if path == "." {
+                        format!(".{key}")
+                    } else {
+                        format!("{path}.{key}")
+                    };
+                    expanded.insert(child_path.clone());
+                    if matches!(value, JsonValue::Object(_) | JsonValue::Array(_)) {
+                        Self::auto_expand(value, &child_path, depth + 1, max_depth, expanded);
+                    }
+                }
+            }
+            JsonValue::Array(arr) => {
+                for (i, value) in arr.iter().enumerate().take(3) {
+                    let child_path = format!("{path}[{i}]");
+                    expanded.insert(child_path.clone());
+                    if matches!(value, JsonValue::Object(_) | JsonValue::Array(_)) {
+                        Self::auto_expand(value, &child_path, depth + 1, max_depth, expanded);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
     pub fn tree_lines(&self) -> Vec<TreeLine> {
-        flatten(&self.doc, &self.expanded)
+        if self.is_large_file {
+            if let Some(ref cache) = self.tree_line_cache {
+                cache.lines.clone()
+            } else {
+                flatten(&self.doc, &self.expanded)
+            }
+        } else {
+            flatten(&self.doc, &self.expanded)
+        }
+    }
+
+    pub fn rebuild_tree_cache(&mut self) {
+        if self.is_large_file {
+            if let Some(ref mut cache) = self.tree_line_cache {
+                cache.rebuild(self.doc.clone(), self.expanded.clone());
+            } else {
+                self.tree_line_cache =
+                    Some(TreeLineCache::new(self.doc.clone(), self.expanded.clone()));
+            }
+        }
+    }
+
+    #[allow(clippy::cast_precision_loss, clippy::uninlined_format_args)]
+    pub fn file_size_display(&self) -> String {
+        if self.file_size < 1024 {
+            format!("{} B", self.file_size)
+        } else if self.file_size < 1024 * 1024 {
+            let kb = self.file_size as f64 / 1024.0;
+            format!("{kb:.1} KB")
+        } else {
+            let mb = self.file_size as f64 / (1024.0 * 1024.0);
+            format!("{mb:.1} MB")
+        }
+    }
+
+    pub fn reload(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        let locale = get_locale();
+        let content = fs::read_to_string(&self.file_path).map_err(|e| {
+            t_to("err.read_failed", &locale)
+                .replace("{0}", &self.file_path.display().to_string())
+                .replace("{1}", &e.to_string())
+        })?;
+
+        let has_comments = content.contains("//") || content.contains("/*");
+        let output = parse_lenient(&content).map_err(|e| {
+            t_to("err.parse_failed", &locale)
+                .replace("{0}", &self.file_path.display().to_string())
+                .replace("{1}", &e.to_string())
+        })?;
+
+        self.snapshot();
+        self.doc = output.value;
+        self.has_comments = has_comments;
+        self.modified = false;
+        self.expanded = Self::compute_initial_expanded(&self.doc, self.is_large_file);
+        self.rebuild_tree_cache();
+
+        if let Ok(metadata) = fs::metadata(&self.file_path) {
+            self.last_modified = metadata.modified().ok();
+        }
+
+        self.file_changed = None;
+        Ok(())
+    }
+
+    pub fn check_file_changed(&mut self) -> bool {
+        if !self.watch_enabled {
+            return false;
+        }
+
+        let Ok(metadata) = fs::metadata(&self.file_path) else {
+            if self.file_changed.is_none() {
+                self.file_changed = Some(FileChangeType::Deleted);
+            }
+            return true;
+        };
+
+        if let (Some(last_mtime), Ok(current_mtime)) = (self.last_modified, metadata.modified())
+            && current_mtime > last_mtime
+        {
+            self.file_changed = Some(FileChangeType::Modified);
+            return true;
+        }
+
+        false
+    }
+
+    pub fn dismiss_file_change(&mut self) {
+        if let Ok(metadata) = fs::metadata(&self.file_path) {
+            self.last_modified = metadata.modified().ok();
+        }
+        self.file_changed = None;
     }
 
     // ── 导航 ──────────────────────────────────────────────────────────────────

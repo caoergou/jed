@@ -78,8 +78,13 @@ pub fn render(frame: &mut Frame, app: &mut App) {
 
 fn render_tree(frame: &mut Frame, app: &mut App, area: Rect, lines: &[TreeLine]) {
     let modified_marker = if app.modified { " [*]" } else { "" };
+    let file_size_marker = if app.is_large_file {
+        format!(" ({})", app.file_size_display())
+    } else {
+        String::new()
+    };
     let title = format!(
-        " jed: {}{modified_marker} ",
+        " jed: {}{modified_marker}{file_size_marker} ",
         app.file_path
             .file_name()
             .unwrap_or_default()
@@ -691,9 +696,12 @@ fn render_help_panel(frame: &mut Frame, area: Rect) {
     let toggle_bool = t_to("tui.help.toggle_bool", &locale);
     let search = t_to("tui.help.search", &locale);
     let menu = t_to("tui.hint.menu", &locale);
+    let watch_reload = t_to("tui.help.watch_reload", &locale);
+    let watch_dismiss = t_to("tui.help.watch_dismiss", &locale);
+    let watch_toggle = t_to("tui.help.watch_toggle", &locale);
 
     let overlay_width = 52u16;
-    let overlay_height = 24u16;
+    let overlay_height = 26u16;
 
     if area.height < overlay_height + 2 || area.width < overlay_width + 2 {
         return;
@@ -800,6 +808,17 @@ fn render_help_panel(frame: &mut Frame, area: Rect) {
         combo_row(ctrl, "S", &save),
         combo_row(ctrl, "Z", &undo),
         combo_row(ctrl, "Y", &redo),
+        Line::from(""),
+        Line::from(Span::styled(
+            "  Watch",
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        )),
+        combo_row(ctrl, "W", &watch_toggle),
+        key_row("R", &watch_reload),
+        key_row("M", &watch_dismiss),
+        Line::from(""),
         combo_row(ctrl, "Q", &quit),
         Line::from(""),
         Line::from(Span::styled(

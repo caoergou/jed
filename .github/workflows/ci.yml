@@ -43,6 +43,9 @@ jobs:
       - name: Clippy (deny warnings)
         run: cargo clippy --all-targets --all-features --locked -- -D warnings
 
+      - name: Build release binary
+        run: cargo build --release --locked
+
       - name: Run tests
         run: cargo test --locked
 

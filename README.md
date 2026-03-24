@@ -264,10 +264,47 @@ cargo build --release
 
 ---
 
+---
+
+## Shell Completions
+
+Enable tab-completion for `jed` commands and options.
+
+### Bash
+
+```bash
+# Write to bash-completion directory (recommended)
+jed completions bash > ~/.local/share/bash-completion/completions/jed
+
+# Or add to a custom directory and source it
+jed completions bash > ~/.bash_completion.d/jed
+echo 'source ~/.bash_completion.d/jed' >> ~/.bashrc
+```
+
+### Zsh
+
+```bash
+# Write to fpath directory
+mkdir -p ~/.zfunc
+jed completions zsh > ~/.zfunc/_jed
+
+# Add to .zshrc (before any compinit call):
+# fpath=(~/.zfunc $fpath)
+
+# Reload shell
+exec zsh
+```
+
+### Other Shells
+
+Fish, PowerShell, and Elvish are also supported. See [CLI_SPEC.md](CLI_SPEC.md#completions-shell) for details.
+
+---
+
 ## Roadmap
 
 ### v1.x — Polish & Distribution
-- [ ] Shell completions documentation and testing (bash/zsh/fish)
+- [x] Shell completions documentation and testing (bash/zsh/fish)
 - [x] `diff --json` structured output mode
 - [x] TOML conversion (`jed convert toml`)
 - [x] Full JSON Schema validation (`type`, `required`, `properties`, `minimum`, `maximum`, `minLength`, `maxLength`, `minItems`, `maxItems`, `items`, `enum`)

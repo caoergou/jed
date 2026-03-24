@@ -399,20 +399,87 @@ jed explain patch
 
 ### `completions <shell>`
 
-生成 Shell 补全脚本。
+生成 Shell 补全脚本，支持命令、选项和文件路径补全。
 
 ```bash
-# Bash
-jed completions bash > ~/.bash_completion.d/jed
-
-# Zsh
-jed completions zsh > ~/.zsh/completions/_jed
-
-# Fish
-jed completions fish > ~/.config/fish/completions/jed.fish
+jed completions <shell>
 ```
 
 支持的 shell：`bash`、`zsh`、`fish`、`powershell`、`elvish`
+
+#### Bash
+
+```bash
+# 方法 1：写入 bash-completion 目录（推荐）
+jed completions bash > ~/.local/share/bash-completion/completions/jed
+
+# 方法 2：写入自定义目录并 source
+mkdir -p ~/.bash_completion.d
+jed completions bash > ~/.bash_completion.d/jed
+echo 'source ~/.bash_completion.d/jed' >> ~/.bashrc
+
+# 重新加载配置
+source ~/.bashrc
+```
+
+#### Zsh
+
+```bash
+# 方法 1：写入 fpath 目录（推荐）
+mkdir -p ~/.zfunc
+jed completions zsh > ~/.zfunc/_jed
+# 确保 ~/.zfunc 在 fpath 中（在 .zshrc 开头添加）：
+# fpath=(~/.zfunc $fpath)
+
+# 方法 2：使用 zinit 等插件管理器
+# 将生成脚本放到 $ZDOTDIR/plugins/jed/ 目录下
+
+# 重新加载
+exec zsh
+```
+
+#### Fish
+
+```bash
+# Fish 会自动加载 completions 目录下的文件
+mkdir -p ~/.config/fish/completions
+jed completions fish > ~/.config/fish/completions/jed.fish
+
+# 无需重载，新命令即生效
+```
+
+#### PowerShell
+
+```powershell
+# 生成并保存脚本
+jed completions powershell > $HOME\.config\powershell\jed-completion.ps1
+
+# 在 $PROFILE 中添加：
+. $HOME\.config\powershell\jed-completion.ps1
+
+# 重新加载
+. $PROFILE
+```
+
+#### Elvish
+
+```bash
+# Elvish 使用 config 目录
+jed completions elvish > ~/.config/elvish/lib/completer/jed.elv
+
+# 或直接在 rc.elv 中 eval
+eval (jed completions elvish)
+```
+
+#### 补全功能
+
+补全脚本支持：
+- **子命令补全**：输入 `jed ` 后按 Tab 显示所有可用命令
+- **选项补全**：输入 `jed get -` 后按 Tab 显示 `--help` 等选项
+- **文件路径补全**：自动补全 JSON 文件路径
+- **动态值补全**：
+  - `--lang` 选项补全：`en`、`zh-CN`、`zh-TW`
+  - `completions` 子命令的 shell 参数补全
 
 ---
 
