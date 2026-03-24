@@ -7,6 +7,85 @@ Edit JSON configs without the struggle — **interactive TUI for humans**, **age
 
 Same binary. Two modes. One engine.
 
+---
+
+## Why Jzen?
+
+### Problem 1: Editing Claude Code MCP Configuration
+
+When you need to modify Claude Code's `settings.json` for MCP servers, the traditional approach forces you to:
+
+- Load the entire config file into your context window (often 100+ lines)
+- Manually locate the field you need to change
+- Rewrite the entire file after modification
+- **Result**: High token consumption, error-prone manual editing
+
+With Jzen, you only pay for what you change:
+
+```bash
+# Inspect structure without reading values
+jzen schema ~/.claude/settings.json
+
+# Get only the specific value you need
+jzen get .mcpServers.github.command ~/.claude/settings.json
+
+# Update a single field atomically
+jzen set .mcpServers.github.env.TOKEN '"ghp_xxxx"' ~/.claude/settings.json
+
+# Batch update in one call (minimal round-trips)
+jzen patch '[
+  {"op": "replace", "path": ".defaultMode", "value": "acceptEdits"},
+  {"op": "add", "path": ".mcpServers.github.enabled", "value": true}
+]' ~/.claude/settings.json
+```
+
+**Token savings**: 90%+ reduction — you read only what you query, not the entire file.
+
+---
+
+### Problem 2: Editing OpenClaw Agent Configuration
+
+OpenClaw stores agent behavior in JSON config. Traditional tools require:
+
+- Opening the entire file to understand its structure
+- Manually editing and saving the full file
+- Risking format errors that break the agent
+
+Jzen makes this seamless:
+
+```bash
+# Visualize structure at a glance
+jzen tree ~/.config/openclaw/agent.json
+
+# Update model configuration
+jzen set .model.provider '"openai"' ~/.config/openclaw/agent.json
+jzen set .model.name '"gpt-4o"' ~/.config/openclaw/agent.json
+
+# Add new MCP server
+jzen set .mcpServers.github '{
+  "command": "npx",
+  "args": ["-y", "@modelcontextprotocol/server-github"]
+}' ~/.config/openclaw/agent.json
+
+# Auto-fix common JSON errors
+jzen fix --strip-comments ~/.config/openclaw/agent.json
+```
+
+**Benefits**: Atomic writes, crash-safe operation, automatic format repair.
+
+---
+
+## Comparison: Traditional vs Jzen
+
+| Task | Traditional Approach | Jzen |
+|------|----------------------|------|
+| Read config structure | Load entire file | `schema` → type-only output |
+| Read specific value | Parse full JSON | `get .key` → single value |
+| Modify one field | Rewrite entire file | `set .key val` → atomic |
+| Multiple changes | Multiple round-trips | `patch` → single call |
+| Repair JSON errors | Manual fixing | `fix` → auto-repair |
+| Token cost | Full file in context | Only queried values |
+
 [![CI](https://github.com/caoergou/jzen/actions/workflows/ci.yml/badge.svg)](https://github.com/caoergou/jzen/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -48,9 +127,21 @@ sudo rpm -i jzen-*.rpm
 ### Install script
 
 ```bash
-# Linux / macOS — auto-detects platform and installs to /usr/local/bin
+# Linux / macOS — auto-detects platform, shell, and installs with completions
 curl -fsSL https://github.com/caoergou/jzen/releases/latest/download/install.sh | sh
+
+# Skip auto-installing shell completions
+SKIP_COMPLETIONS=1 curl -fsSL https://github.com/caoergou/jzen/releases/latest/download/install.sh | sh
+
+# Custom install directory
+INSTALL_DIR=~/.local/bin curl -fsSL https://github.com/caoergou/jzen/releases/latest/download/install.sh | sh
 ```
+
+The install script will:
+1. Download the correct binary for your platform
+2. Detect your shell (bash/zsh/fish)
+3. Auto-install shell completions to the appropriate location
+4. Print completion instructions if manual setup is needed
 
 ### Pre-built binaries
 
@@ -77,6 +168,22 @@ cargo install jzen
 ```bash
 cargo install --git https://github.com/caoergou/jzen
 ```
+
+---
+
+## Agent Skill
+
+Install the jzen skill to enable AI agents to edit JSON with minimal token usage:
+
+```bash
+# Install for Claude Code, OpenClaw, Codex, etc.
+npx skills add caoergou/jzen
+
+# Or install a specific skill from this repo
+npx skills add caoergou/jzen --skill jzen
+```
+
+After installation, the agent will automatically use jzen for JSON operations, reducing token consumption by 90%+.
 
 ---
 
@@ -338,14 +445,16 @@ Fish, PowerShell, and Elvish are also supported. See [CLI_SPEC.md](CLI_SPEC.md#c
 
 ## Roadmap
 
-### v1.x — Polish & Distribution
-- [x] Shell completions documentation and testing (bash/zsh/fish)
+### v1.x — ✅ Complete (Polished & Distributed)
+- [x] Shell completions (bash/zsh/fish/powershell/elvish)
 - [x] `diff --json` structured output mode
 - [x] TOML conversion (`jzen convert toml`)
 - [x] Full JSON Schema validation (`type`, `required`, `properties`, `minimum`, `maximum`, `minLength`, `maxLength`, `minItems`, `maxItems`, `items`, `enum`)
 - [x] Package manager distribution: Homebrew, apt/deb, rpm
+- [x] YAML conversion (`jzen convert yaml`)
+- [x] File watching in TUI mode
 
-### v2.x — Power Features
+### v2.x — Power Features (In Progress)
 - [ ] Interactive shell mode (`jzen shell`) — persistent REPL for batch edits without reopening files
 - [ ] JSONC comment preservation on save (CST-based; currently stripped on write)
 - [ ] TUI mouse support
@@ -353,7 +462,6 @@ Fish, PowerShell, and Elvish are also supported. See [CLI_SPEC.md](CLI_SPEC.md#c
 
 ### v3.x — Long Term
 - [ ] Multi-file tabs in TUI
-- [ ] Watch mode: reload TUI on external file change
 - [ ] JSON Pointer (RFC 6901) as alternative path syntax
 
 ---
