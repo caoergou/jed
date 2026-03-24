@@ -5,7 +5,7 @@ use ratatui::widgets::ListState;
 
 use crate::engine::{
     FormatOptions, JsonValue, add as engine_add, delete as engine_delete, format_pretty, get,
-    parse_lenient, rename_key, set as engine_set,
+    insert as engine_insert, parse_lenient, rename_key, set as engine_set,
 };
 use crate::i18n::{get_locale, t_to};
 
@@ -94,6 +94,7 @@ pub enum AppMode {
 pub enum ContextAction {
     Edit,
     AddChild,
+    AddSibling,
     Delete,
     CopyKey,
     CopyValue,
@@ -107,6 +108,7 @@ impl ContextAction {
         &[
             ContextAction::Edit,
             ContextAction::AddChild,
+            ContextAction::AddSibling,
             ContextAction::Delete,
             ContextAction::CopyKey,
             ContextAction::CopyValue,
@@ -122,6 +124,7 @@ impl ContextAction {
         match self {
             ContextAction::Edit => t_to("tui.action.edit", &locale),
             ContextAction::AddChild => t_to("tui.action.add_child", &locale),
+            ContextAction::AddSibling => t_to("tui.action.add_sibling", &locale),
             ContextAction::Delete => t_to("tui.action.delete", &locale),
             ContextAction::CopyKey => t_to("tui.action.copy_key", &locale),
             ContextAction::CopyValue => t_to("tui.action.copy_value", &locale),
@@ -136,6 +139,7 @@ impl ContextAction {
         match self {
             ContextAction::Edit => 'e',
             ContextAction::AddChild => 'a',
+            ContextAction::AddSibling => 's',
             ContextAction::Delete => 'd',
             ContextAction::CopyKey => 'c',
             ContextAction::CopyValue => 'v',
@@ -240,12 +244,6 @@ impl App {
     /// 生成当前的树形行列表。
     pub fn tree_lines(&self) -> Vec<TreeLine> {
         flatten(&self.doc, &self.expanded)
-    }
-
-    /// 当前选中的树行（如果存在）。
-    #[allow(dead_code)]
-    pub fn current_line<'a>(&self, lines: &'a [TreeLine]) -> Option<&'a TreeLine> {
-        lines.get(self.cursor)
     }
 
     // ── 导航 ──────────────────────────────────────────────────────────────────
@@ -623,101 +621,188 @@ impl App {
     }
 
     /// 执行右键菜单操作。
-    #[allow(clippy::too_many_lines)]
     pub fn execute_context_action(&mut self, action: ContextAction) {
+        match action {
+            ContextAction::Edit => self.context_edit(),
+            ContextAction::AddChild => self.context_add_child(),
+            ContextAction::AddSibling => self.context_add_sibling(),
+            ContextAction::Delete => self.context_delete(),
+            ContextAction::CopyKey => self.context_copy_key(),
+            ContextAction::CopyValue => self.context_copy_value(),
+            ContextAction::CopyPath => self.context_copy_path(),
+            ContextAction::ExpandAll => self.context_expand_all(),
+            ContextAction::CollapseAll => self.context_collapse_all(),
+        }
+    }
+
+    fn context_edit(&mut self) {
+        self.mode = AppMode::Normal;
+        self.start_edit();
+    }
+
+    fn context_add_child(&mut self) {
+        self.mode = AppMode::Normal;
+        self.start_add_node();
+    }
+
+    fn context_delete(&mut self) {
+        self.delete_current();
+        self.mode = AppMode::Normal;
+        self.menu_hover_row = None;
+    }
+
+    fn context_copy_key(&mut self) {
         let lines = self.tree_lines();
         let Some(line) = lines.get(self.cursor) else {
             self.mode = AppMode::Normal;
             return;
         };
+        let key = &line.display_key;
+        if key.is_empty() {
+            self.set_status(&t_to("tui.status.no_key", &get_locale()), StatusLevel::Warn);
+        } else if let Err(e) = Self::copy_to_clipboard(key) {
+            self.set_status(
+                &t_to("tui.status.copy_failed", &get_locale()).replace("{0}", &e.to_string()),
+                StatusLevel::Error,
+            );
+        } else {
+            self.set_status(
+                &t_to("tui.status.copied_key", &get_locale()).replace("{0}", key),
+                StatusLevel::Info,
+            );
+        }
+        self.mode = AppMode::Normal;
+    }
 
-        match action {
-            ContextAction::Edit => {
-                self.mode = AppMode::Normal;
-                self.start_edit();
-            }
-            ContextAction::AddChild => {
-                self.mode = AppMode::Normal;
-                self.start_add_node();
-            }
-            ContextAction::Delete => {
-                self.delete_current();
-                self.mode = AppMode::Normal;
-                self.menu_hover_row = None;
-            }
-            ContextAction::CopyKey => {
-                // 复制 key（如果是对象键）
-                let key = &line.display_key;
-                if key.is_empty() {
-                    self.set_status(&t_to("tui.status.no_key", &get_locale()), StatusLevel::Warn);
-                } else if let Err(e) = Self::copy_to_clipboard(key) {
+    fn context_copy_value(&mut self) {
+        let lines = self.tree_lines();
+        let Some(line) = lines.get(self.cursor) else {
+            self.mode = AppMode::Normal;
+            return;
+        };
+        let value = &line.value_preview;
+        if value.is_empty() {
+            self.set_status(
+                &t_to("tui.status.no_value", &get_locale()),
+                StatusLevel::Warn,
+            );
+        } else if let Err(e) = Self::copy_to_clipboard(value) {
+            self.set_status(
+                &t_to("tui.status.copy_failed", &get_locale()).replace("{0}", &e.to_string()),
+                StatusLevel::Error,
+            );
+        } else {
+            self.set_status(
+                &t_to("tui.status.copied_value", &get_locale()),
+                StatusLevel::Info,
+            );
+        }
+        self.mode = AppMode::Normal;
+    }
+
+    fn context_copy_path(&mut self) {
+        let lines = self.tree_lines();
+        let Some(line) = lines.get(self.cursor) else {
+            self.mode = AppMode::Normal;
+            return;
+        };
+        let path = format!("$.{}", line.path.strip_prefix('.').unwrap_or(&line.path));
+        if let Err(e) = Self::copy_to_clipboard(&path) {
+            self.set_status(
+                &t_to("tui.status.copy_failed", &get_locale()).replace("{0}", &e.to_string()),
+                StatusLevel::Error,
+            );
+        } else {
+            self.set_status(
+                &t_to("tui.status.copied_path", &get_locale()).replace("{0}", &path),
+                StatusLevel::Info,
+            );
+        }
+        self.mode = AppMode::Normal;
+    }
+
+    fn context_expand_all(&mut self) {
+        self.expand_all();
+        self.set_status(
+            &t_to("tui.status.expanded_all", &get_locale()),
+            StatusLevel::Info,
+        );
+        self.mode = AppMode::Normal;
+    }
+
+    fn context_collapse_all(&mut self) {
+        self.collapse_all();
+        self.set_status(
+            &t_to("tui.status.collapsed_all", &get_locale()),
+            StatusLevel::Info,
+        );
+        self.mode = AppMode::Normal;
+    }
+
+    fn context_add_sibling(&mut self) {
+        self.mode = AppMode::Normal;
+        let lines = self.tree_lines();
+        let Some(line) = lines.get(self.cursor) else {
+            return;
+        };
+
+        // 不能给根节点添加兄弟
+        if line.path == "." {
+            self.set_status(
+                &t_to("tui.status.cannot_delete_root", &get_locale()),
+                StatusLevel::Warn,
+            );
+            return;
+        }
+
+        // 获取父节点路径
+        let parent = parent_path(&line.path);
+
+        // 判断父节点类型
+        match get(&self.doc, &parent) {
+            Ok(JsonValue::Array(_)) => {
+                // 数组：在当前索引后面插入 null
+                let current_index = extract_array_index(&line.path);
+                self.snapshot();
+                if let Err(e) =
+                    engine_insert(&mut self.doc, &parent, current_index + 1, JsonValue::Null)
+                {
                     self.set_status(
-                        &t_to("tui.status.copy_failed", &get_locale())
-                            .replace("{0}", &e.to_string()),
+                        &t_to("err.add_failed", &get_locale()).replace("{0}", &e.to_string()),
                         StatusLevel::Error,
                     );
                 } else {
+                    self.modified = true;
+                    self.expanded.insert(parent.clone());
                     self.set_status(
-                        &t_to("tui.status.copied_key", &get_locale()).replace("{0}", key),
+                        &t_to("tui.status.added_null", &get_locale()),
                         StatusLevel::Info,
                     );
+                    // 移动光标到新插入的节点
+                    let new_lines = self.tree_lines();
+                    let target_path = format!("{}[{}]", parent, current_index + 1);
+                    if let Some(idx) = new_lines.iter().position(|l| l.path == target_path) {
+                        self.cursor = idx;
+                        self.list_state.select(Some(idx));
+                    }
                 }
-                self.mode = AppMode::Normal;
             }
-            ContextAction::CopyValue => {
-                // 复制 value
-                let value = &line.value_preview;
-                if value.is_empty() {
-                    self.set_status(
-                        &t_to("tui.status.no_value", &get_locale()),
-                        StatusLevel::Warn,
-                    );
-                } else if let Err(e) = Self::copy_to_clipboard(value) {
-                    self.set_status(
-                        &t_to("tui.status.copy_failed", &get_locale())
-                            .replace("{0}", &e.to_string()),
-                        StatusLevel::Error,
-                    );
-                } else {
-                    self.set_status(
-                        &t_to("tui.status.copied_value", &get_locale()),
-                        StatusLevel::Info,
-                    );
-                }
-                self.mode = AppMode::Normal;
+            Ok(JsonValue::Object(_)) => {
+                // 对象：进入 AddNode 模式，在父节点添加新字段
+                self.mode = AppMode::AddNode {
+                    parent_path: parent,
+                    is_array: false,
+                    key_buffer: String::new(),
+                    key_cursor: 0,
+                    selecting_type: false,
+                    type_selected: 0,
+                };
             }
-            ContextAction::CopyPath => {
-                // 复制 JSONPath
-                let path = format!("$.{}", line.path.strip_prefix('.').unwrap_or(&line.path));
-                if let Err(e) = Self::copy_to_clipboard(&path) {
-                    self.set_status(
-                        &t_to("tui.status.copy_failed", &get_locale())
-                            .replace("{0}", &e.to_string()),
-                        StatusLevel::Error,
-                    );
-                } else {
-                    self.set_status(
-                        &t_to("tui.status.copied_path", &get_locale()).replace("{0}", &path),
-                        StatusLevel::Info,
-                    );
-                }
-                self.mode = AppMode::Normal;
-            }
-            ContextAction::ExpandAll => {
-                self.expand_all();
+            _ => {
                 self.set_status(
-                    &t_to("tui.status.expanded_all", &get_locale()),
-                    StatusLevel::Info,
+                    &t_to("tui.status.cannot_delete_root", &get_locale()),
+                    StatusLevel::Warn,
                 );
-                self.mode = AppMode::Normal;
-            }
-            ContextAction::CollapseAll => {
-                self.collapse_all();
-                self.set_status(
-                    &t_to("tui.status.collapsed_all", &get_locale()),
-                    StatusLevel::Info,
-                );
-                self.mode = AppMode::Normal;
             }
         }
     }
@@ -1010,8 +1095,8 @@ impl App {
         #[allow(clippy::default_trait_access)]
         let new_value = match type_selected {
             1 => JsonValue::Object(Default::default()), // {}
-            2 => JsonValue::Array(Default::default()), // []
-            _ => JsonValue::Null,                      // null (默认)
+            2 => JsonValue::Array(Default::default()),  // []
+            _ => JsonValue::Null,                       // null (默认)
         };
 
         // 构建目标路径
@@ -1103,4 +1188,19 @@ fn parent_path(path: &str) -> String {
         }
     }
     ".".into()
+}
+
+/// 从路径中提取数组索引（如 `.arr[3]` 返回 3）。
+/// 如果路径不以数组索引结尾，返回 0。
+fn extract_array_index(path: &str) -> usize {
+    // 查找最后一个 [ 和 ]
+    let open = path.rfind('[');
+    let close = path.rfind(']');
+    if let (Some(open_idx), Some(close_idx)) = (open, close)
+        && close_idx > open_idx
+    {
+        let index_str = &path[open_idx + 1..close_idx];
+        return index_str.parse().unwrap_or(0);
+    }
+    0
 }

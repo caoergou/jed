@@ -12,6 +12,10 @@ use super::app::{App, AppMode, ContextAction};
 
 // 双击时间间隔（毫秒）
 const DOUBLE_CLICK_MS: u64 = 500;
+// PageUp/PageDown 滚动行数
+const PAGE_SCROLL_AMOUNT: usize = 10;
+// 鼠标滚轮滚动行数
+const MOUSE_SCROLL_AMOUNT: usize = 5;
 
 /// 处理终端事件，更新 App 状态。
 pub fn handle_event(app: &mut App, event: &Event) {
@@ -52,14 +56,12 @@ fn handle_normal(app: &mut App, key: KeyEvent) {
 
         // PageUp/PageDown: 快速滚动（大幅移动）
         (KeyCode::PageUp, _) => {
-            let scroll_amount = 10;
-            app.cursor = app.cursor.saturating_sub(scroll_amount);
+            app.cursor = app.cursor.saturating_sub(PAGE_SCROLL_AMOUNT);
             app.list_state.select(Some(app.cursor));
         }
         (KeyCode::PageDown, _) => {
-            let scroll_amount = 10;
             let lines = app.tree_lines();
-            app.cursor = (app.cursor + scroll_amount).min(lines.len().saturating_sub(1));
+            app.cursor = (app.cursor + PAGE_SCROLL_AMOUNT).min(lines.len().saturating_sub(1));
             app.list_state.select(Some(app.cursor));
         }
 
@@ -126,9 +128,9 @@ fn handle_normal(app: &mut App, key: KeyEvent) {
             if app.modified {
                 // 已修改：检查是否是连续按两次 Esc
                 let now = Instant::now();
-                let is_double_escape = app
-                    .last_escape_time
-                    .is_some_and(|last| now.duration_since(last) < Duration::from_millis(500));
+                let is_double_escape = app.last_escape_time.is_some_and(|last| {
+                    now.duration_since(last) < Duration::from_millis(DOUBLE_CLICK_MS)
+                });
 
                 if is_double_escape {
                     // 连续按两次，强制退出
@@ -500,6 +502,7 @@ fn handle_context_menu(app: &mut App, key: KeyEvent) {
         // 快捷键直接执行
         KeyCode::Char('e') => app.execute_context_action(ContextAction::Edit),
         KeyCode::Char('a') => app.execute_context_action(ContextAction::AddChild),
+        KeyCode::Char('s') => app.execute_context_action(ContextAction::AddSibling),
         KeyCode::Char('d') => app.execute_context_action(ContextAction::Delete),
         KeyCode::Char('c') => app.execute_context_action(ContextAction::CopyKey),
         KeyCode::Char('v') => app.execute_context_action(ContextAction::CopyValue),
@@ -655,15 +658,13 @@ fn handle_mouse(app: &mut App, event: crossterm::event::MouseEvent) {
     // 只处理左键单击和滚轮事件
     match event.kind {
         MouseEventKind::ScrollUp => {
-            let scroll_amount = 5;
-            app.cursor = app.cursor.saturating_sub(scroll_amount);
+            app.cursor = app.cursor.saturating_sub(MOUSE_SCROLL_AMOUNT);
             app.list_state.select(Some(app.cursor));
             return;
         }
         MouseEventKind::ScrollDown => {
-            let scroll_amount = 5;
             let lines = app.tree_lines();
-            app.cursor = (app.cursor + scroll_amount).min(lines.len().saturating_sub(1));
+            app.cursor = (app.cursor + MOUSE_SCROLL_AMOUNT).min(lines.len().saturating_sub(1));
             app.list_state.select(Some(app.cursor));
             return;
         }

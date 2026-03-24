@@ -540,11 +540,7 @@ fn render_add_node_overlay(frame: &mut Frame, app: &App, area: Rect) {
 
     // 类型选项
     #[allow(clippy::useless_vec)]
-    let type_options = vec![
-        ("null", "null (默认)"),
-        ("{}", "空对象"),
-        ("[]", "空数组"),
-    ];
+    let type_options = vec![("null", "null (默认)"), ("{}", "空对象"), ("[]", "空数组")];
 
     let title = format!(" {} ", t_to("tui.overlay.select_type", &locale));
 
@@ -558,7 +554,9 @@ fn render_add_node_overlay(frame: &mut Frame, app: &App, area: Rect) {
         let is_selected = i == *type_selected;
         let prefix = if is_selected { "▶ " } else { "  " };
         let style = if is_selected {
-            Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD)
         } else {
             Style::default().fg(Color::DarkGray)
         };
@@ -571,7 +569,10 @@ fn render_add_node_overlay(frame: &mut Frame, app: &App, area: Rect) {
         };
         lines.push(Line::from(vec![
             Span::styled(format!("{prefix}[{symbol}]"), style),
-            Span::styled(format!(" {locale_label}"), Style::default().fg(Color::White)),
+            Span::styled(
+                format!(" {locale_label}"),
+                Style::default().fg(Color::White),
+            ),
         ]));
     }
 

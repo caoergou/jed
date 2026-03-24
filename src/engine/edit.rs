@@ -145,6 +145,38 @@ pub fn add(doc: &mut JsonValue, path: &str, value: JsonValue) -> Result<(), Edit
     }
 }
 
+/// 向数组的指定索引位置插入元素。
+/// 对于对象，等价于设置一个新字段（需要提供 key）。
+pub fn insert(
+    doc: &mut JsonValue,
+    path: &str,
+    index: usize,
+    value: JsonValue,
+) -> Result<(), EditError> {
+    let node = if path == "." || path.is_empty() {
+        doc
+    } else {
+        let segments = parse_path(path)?;
+        navigate_to_mut(doc, &segments)?
+    };
+
+    let JsonValue::Array(arr) = node else {
+        return Err(EditError::NotAddable {
+            type_name: node.type_name(),
+        });
+    };
+
+    // 允许在末尾插入（index == len）以及正常插入
+    if index > arr.len() {
+        return Err(EditError::Path(PathError::IndexOutOfBounds {
+            index: i64::try_from(index).unwrap_or(i64::MAX),
+            len: arr.len(),
+        }));
+    }
+    arr.insert(index, value);
+    Ok(())
+}
+
 /// 将源路径的值移动到目标路径（先删除再设置）。
 pub fn move_value(doc: &mut JsonValue, src: &str, dst: &str) -> Result<(), EditError> {
     if src == dst {
