@@ -128,7 +128,7 @@ impl ContextAction {
     }
 
     /// 获取操作对应的快捷键（单个字符）
-    pub fn shortcut(&self) -> char {
+    pub fn shortcut(self) -> char {
         match self {
             ContextAction::Edit => 'e',
             ContextAction::AddChild => 'a',
@@ -415,7 +415,13 @@ impl App {
 
     /// 更新编辑缓冲区的实时校验状态
     pub fn update_edit_validation(&mut self) {
-        let AppMode::Edit { buffer, detected_type, parse_error, .. } = &mut self.mode else {
+        let AppMode::Edit {
+            buffer,
+            detected_type,
+            parse_error,
+            ..
+        } = &mut self.mode
+        else {
             return;
         };
         let (new_type, new_error) = Self::detect_value_type(buffer);
@@ -798,20 +804,20 @@ impl App {
     /// 尝试保存。先显示 diff 预览。
     pub fn try_save(&mut self) {
         // 读取当前文件内容用于 diff
-        let original_content = std::fs::read_to_string(&self.file_path)
-            .unwrap_or_default();
+        let original_content = std::fs::read_to_string(&self.file_path).unwrap_or_default();
         let new_content = format_pretty(&self.doc, &FormatOptions::default());
 
         // 如果内容相同，直接提示无需保存
         if original_content == new_content {
-            self.set_status(&t_to("tui.status.no_changes", &get_locale()), StatusLevel::Info);
+            self.set_status(
+                &t_to("tui.status.no_changes", &get_locale()),
+                StatusLevel::Info,
+            );
             return;
         }
 
         // 进入 diff 预览模式
-        self.mode = AppMode::ConfirmSave {
-            original_content,
-        };
+        self.mode = AppMode::ConfirmSave { original_content };
     }
 
     /// 确认保存（从 diff 预览）。
@@ -824,7 +830,10 @@ impl App {
     /// 取消保存。
     pub fn cancel_save(&mut self) {
         self.mode = AppMode::Normal;
-        self.set_status(&t_to("tui.status.cancel_save", &get_locale()), StatusLevel::Info);
+        self.set_status(
+            &t_to("tui.status.cancel_save", &get_locale()),
+            StatusLevel::Info,
+        );
     }
 
     pub fn do_save(&mut self) {

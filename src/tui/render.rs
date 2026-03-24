@@ -22,7 +22,11 @@ pub fn render(frame: &mut Frame, app: &mut App) {
     // 布局：树形主区域 + 底部状态栏 + 快捷键提示条
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Min(1), Constraint::Length(1), Constraint::Length(1)])
+        .constraints([
+            Constraint::Min(1),
+            Constraint::Length(1),
+            Constraint::Length(1),
+        ])
         .split(area);
 
     render_tree(frame, app, chunks[0], &lines);
@@ -189,13 +193,13 @@ fn render_statusbar(frame: &mut Frame, app: &App, area: Rect, _lines: &[TreeLine
             Span::styled(format!(" {msg} ",), Style::default().fg(color)),
         ]
     } else {
-        vec![
-            Span::styled(format!(" {path} ",), Style::default().fg(Color::DarkGray)),
-        ]
+        vec![Span::styled(
+            format!(" {path} ",),
+            Style::default().fg(Color::DarkGray),
+        )]
     };
 
-    let bar = Paragraph::new(Line::from(status_text))
-        .style(Style::default().bg(Color::Black));
+    let bar = Paragraph::new(Line::from(status_text)).style(Style::default().bg(Color::Black));
     frame.render_widget(bar, area);
 }
 
@@ -203,7 +207,7 @@ fn render_statusbar(frame: &mut Frame, app: &App, area: Rect, _lines: &[TreeLine
 fn render_helpbar(frame: &mut Frame, app: &App, area: Rect) {
     let locale = get_locale();
     let mod_key = modifier_key();
-    let save_key = format!("{}+S", mod_key);
+    let save_key = format!("{mod_key}+S");
     let hints = match &app.mode {
         AppMode::Normal => vec![
             ("↑↓", t_to("tui.hint.move", &locale)),
@@ -228,7 +232,7 @@ fn render_helpbar(frame: &mut Frame, app: &App, area: Rect) {
                 ]
             }
         }
-        AppMode::EditKey { .. } => vec![
+        AppMode::EditKey { .. } | AppMode::AddNode { .. } => vec![
             ("Enter", t_to("tui.hint.confirm", &locale)),
             ("Esc", t_to("tui.hint.cancel", &locale)),
         ],
@@ -236,13 +240,7 @@ fn render_helpbar(frame: &mut Frame, app: &App, area: Rect) {
             ("Enter", t_to("tui.hint.next_match", &locale)),
             ("Esc", t_to("tui.hint.exit", &locale)),
         ],
-        AppMode::AddNode { .. } => vec![
-            ("Enter", t_to("tui.hint.confirm", &locale)),
-            ("Esc", t_to("tui.hint.cancel", &locale)),
-        ],
-        AppMode::Help => vec![
-            ("F1/Esc", t_to("tui.hint.close", &locale)),
-        ],
+        AppMode::Help => vec![("F1/Esc", t_to("tui.hint.close", &locale))],
         AppMode::ConfirmQuit { .. } => vec![
             ("Y", t_to("tui.hint.save_quit", &locale)),
             ("N", t_to("tui.hint.no_save_quit", &locale)),
@@ -277,8 +275,8 @@ fn render_helpbar(frame: &mut Frame, app: &App, area: Rect) {
         ));
     }
 
-    let bar = Paragraph::new(Line::from(spans))
-        .style(Style::default().bg(Color::Black).fg(Color::White));
+    let bar =
+        Paragraph::new(Line::from(spans)).style(Style::default().bg(Color::Black).fg(Color::White));
     frame.render_widget(bar, area);
 }
 
@@ -316,7 +314,10 @@ fn render_edit_overlay(frame: &mut Frame, app: &App, area: Rect) {
     // 根据检测结果决定边框颜色
     let (border_color, type_info) = if parse_error.is_some() {
         // 有解析错误，显示为字符串
-        (Color::DarkGray, t_to("tui.status.string_as_str", &get_locale()))
+        (
+            Color::DarkGray,
+            t_to("tui.status.string_as_str", &get_locale()),
+        )
     } else if let Some(detected) = detected_type {
         if detected == "empty" {
             (Color::Yellow, "empty".to_string())
@@ -325,13 +326,16 @@ fn render_edit_overlay(frame: &mut Frame, app: &App, area: Rect) {
             (Color::Green, format!("✓ {detected}"))
         } else {
             // 类型不匹配
-            (Color::Yellow, format!("⚠ {detected} (原类型: {value_type})"))
+            (
+                Color::Yellow,
+                format!("⚠ {detected} (原类型: {value_type})"),
+            )
         }
     } else {
-        (Color::Yellow, value_type.to_string())
+        (Color::Yellow, value_type.clone())
     };
 
-    let title = format!(" 编辑 {value_type} - {path} [{}] ", type_info);
+    let title = format!(" 编辑 {value_type} - {path} [{type_info}] ",);
 
     let para = Paragraph::new(display_buf)
         .block(
@@ -505,15 +509,30 @@ fn render_confirm_quit_overlay(frame: &mut Frame, area: Rect) {
         Line::from(""),
         Line::from(Span::styled(
             "  文件已修改，是否保存？",
-            Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
         )),
         Line::from(""),
         Line::from(vec![
-            Span::styled(" [ Y ] ", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                " [ Y ] ",
+                Style::default()
+                    .fg(Color::Green)
+                    .add_modifier(Modifier::BOLD),
+            ),
             Span::styled("保存并退出   ", Style::default().fg(Color::White)),
-            Span::styled(" [ N ] ", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                " [ N ] ",
+                Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+            ),
             Span::styled("不保存退出   ", Style::default().fg(Color::White)),
-            Span::styled(" [ C ] ", Style::default().fg(Color::DarkGray).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                " [ C ] ",
+                Style::default()
+                    .fg(Color::DarkGray)
+                    .add_modifier(Modifier::BOLD),
+            ),
             Span::styled("取消", Style::default().fg(Color::White)),
         ]),
     ];
@@ -535,10 +554,10 @@ fn render_confirm_quit_overlay(frame: &mut Frame, area: Rect) {
 fn render_help_panel(frame: &mut Frame, area: Rect) {
     let locale = get_locale();
     let mod_key = modifier_key();
-    let save_key = format!("{}+S", mod_key).replace("+", "");
-    let undo_key = format!("{}+Z", mod_key).replace("+", "");
-    let redo_key = format!("{}+Y", mod_key).replace("+", "");
-    let quit_key = format!("{}+Q", mod_key).replace("+", "");
+    let save_key = format!("{mod_key}+S").replace('+', "");
+    let undo_key = format!("{mod_key}+Z").replace('+', "");
+    let redo_key = format!("{mod_key}+Y").replace('+', "");
+    let quit_key = format!("{mod_key}+Q").replace('+', "");
 
     // i18n 文本
     let title = t_to("tui.help.title", &locale);
@@ -581,36 +600,92 @@ fn render_help_panel(frame: &mut Frame, area: Rect) {
     frame.render_widget(Clear, overlay_area);
 
     // 预创建带快捷键的字符串
-    let save_line = format!("    [{:^8}]      {save}", save_key);
-    let undo_line = format!("    [{:^8}]      {undo}", undo_key);
-    let redo_line = format!("    [{:^8}]      {redo}", redo_key);
-    let quit_line = format!("    [{:^8}]      {quit}", quit_key);
+    let save_line = format!("    [{save_key:^8}]      {save}");
+    let undo_line = format!("    [{undo_key:^8}]      {undo}");
+    let redo_line = format!("    [{redo_key:^8}]      {redo}");
+    let quit_line = format!("    [{quit_key:^8}]      {quit}");
 
     let help_content: Vec<Line> = vec![
         Line::from(""),
-        Line::from(Span::styled(format!("  {help_title}"), Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD).add_modifier(Modifier::UNDERLINED))),
+        Line::from(Span::styled(
+            format!("  {help_title}"),
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD)
+                .add_modifier(Modifier::UNDERLINED),
+        )),
         Line::from(""),
-        Line::from(Span::styled(format!("  {nav}"), Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))),
-        Line::from(Span::styled(format!("    [↑] / [↓]      {move_up_down}"), Style::default().fg(Color::White))),
-        Line::from(Span::styled(format!("    [←] / [→]      {collapse_expand}"), Style::default().fg(Color::White))),
-        Line::from(Span::styled(format!("    [Space]        {toggle_expand}"), Style::default().fg(Color::White))),
-        Line::from(Span::styled(format!("    [PgUp]/[PgDn]  {quick_scroll}"), Style::default().fg(Color::White))),
-        Line::from(Span::styled(format!("    [Home]/[End]   {jump_begin_end}"), Style::default().fg(Color::White))),
+        Line::from(Span::styled(
+            format!("  {nav}"),
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        )),
+        Line::from(Span::styled(
+            format!("    [↑] / [↓]      {move_up_down}"),
+            Style::default().fg(Color::White),
+        )),
+        Line::from(Span::styled(
+            format!("    [←] / [→]      {collapse_expand}"),
+            Style::default().fg(Color::White),
+        )),
+        Line::from(Span::styled(
+            format!("    [Space]        {toggle_expand}"),
+            Style::default().fg(Color::White),
+        )),
+        Line::from(Span::styled(
+            format!("    [PgUp]/[PgDn]  {quick_scroll}"),
+            Style::default().fg(Color::White),
+        )),
+        Line::from(Span::styled(
+            format!("    [Home]/[End]   {jump_begin_end}"),
+            Style::default().fg(Color::White),
+        )),
         Line::from(""),
-        Line::from(Span::styled(format!("  {edit}"), Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))),
-        Line::from(Span::styled(format!("    [Enter]        {edit_value}"), Style::default().fg(Color::White))),
-        Line::from(Span::styled(format!("    [N]            {new_node}"), Style::default().fg(Color::White))),
-        Line::from(Span::styled(format!("    [Delete]       {delete_node}"), Style::default().fg(Color::White))),
-        Line::from(Span::styled(format!("    [Tab]          {toggle_bool}"), Style::default().fg(Color::White))),
+        Line::from(Span::styled(
+            format!("  {edit}"),
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        )),
+        Line::from(Span::styled(
+            format!("    [Enter]        {edit_value}"),
+            Style::default().fg(Color::White),
+        )),
+        Line::from(Span::styled(
+            format!("    [N]            {new_node}"),
+            Style::default().fg(Color::White),
+        )),
+        Line::from(Span::styled(
+            format!("    [Delete]       {delete_node}"),
+            Style::default().fg(Color::White),
+        )),
+        Line::from(Span::styled(
+            format!("    [Tab]          {toggle_bool}"),
+            Style::default().fg(Color::White),
+        )),
         Line::from(""),
-        Line::from(Span::styled(format!("  {file}"), Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))),
-        Line::from(Span::styled(format!("    [/]            {search}"), Style::default().fg(Color::White))),
+        Line::from(Span::styled(
+            format!("  {file}"),
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        )),
+        Line::from(Span::styled(
+            format!("    [/]            {search}"),
+            Style::default().fg(Color::White),
+        )),
         Line::from(Span::styled(save_line, Style::default().fg(Color::White))),
         Line::from(Span::styled(undo_line, Style::default().fg(Color::White))),
         Line::from(Span::styled(redo_line, Style::default().fg(Color::White))),
         Line::from(Span::styled(quit_line, Style::default().fg(Color::White))),
         Line::from(""),
-        Line::from(Span::styled(close_help, Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))),
+        Line::from(Span::styled(
+            close_help,
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        )),
     ];
 
     let para = Paragraph::new(help_content)
@@ -639,14 +714,13 @@ fn render_save_preview(frame: &mut Frame, app: &App, area: Rect) {
     // 计算 diff 统计
     let old_lines = original_content.lines().count();
     let new_lines = new_content.lines().count();
-    let line_diff = new_lines as i32 - old_lines as i32;
+    #[allow(clippy::cast_possible_wrap)]
+    let line_diff = new_lines as i64 - old_lines as i64;
     let lines_text = t_to("tui.status.lines", &locale);
-    let diff_info = if line_diff > 0 {
-        format!("+{}{}", line_diff, lines_text)
-    } else if line_diff < 0 {
-        format!("{}{}", line_diff, lines_text)
-    } else {
-        t_to("tui.status.no_changes", &locale)
+    let diff_info = match line_diff.cmp(&0) {
+        std::cmp::Ordering::Greater => format!("+{line_diff}{lines_text}"),
+        std::cmp::Ordering::Less => format!("{line_diff}{lines_text}"),
+        std::cmp::Ordering::Equal => t_to("tui.status.no_changes", &locale),
     };
 
     // 覆盖层大小
@@ -665,10 +739,10 @@ fn render_save_preview(frame: &mut Frame, app: &App, area: Rect) {
     frame.render_widget(Clear, overlay_area);
 
     // 构建消息
-    let file_name = app.file_path
-        .file_name()
-        .map(|s| s.to_string_lossy().to_string())
-        .unwrap_or_else(|| "unknown".to_string());
+    let file_name = app.file_path.file_name().map_or_else(
+        || "unknown".to_string(),
+        |s| s.to_string_lossy().to_string(),
+    );
 
     let save_confirm = t_to("tui.status.save_confirm", &locale);
     let change = t_to("tui.status.change", &locale);
@@ -678,23 +752,43 @@ fn render_save_preview(frame: &mut Frame, app: &App, area: Rect) {
     let msg = vec![
         Line::from(""),
         Line::from(vec![
-            Span::styled(format!("  {save_confirm}"), Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                format!("  {save_confirm}"),
+                Style::default()
+                    .fg(Color::White)
+                    .add_modifier(Modifier::BOLD),
+            ),
             Span::styled(&file_name, Style::default().fg(Color::Cyan)),
         ]),
         Line::from(""),
         Line::from(vec![
             Span::styled(format!("  {change}"), Style::default().fg(Color::DarkGray)),
-            Span::styled(&diff_info, Style::default().fg(
-                if line_diff > 0 { Color::Green }
-                else if line_diff < 0 { Color::Red }
-                else { Color::DarkGray }
-            )),
+            Span::styled(
+                &diff_info,
+                Style::default().fg(match line_diff.cmp(&0) {
+                    std::cmp::Ordering::Greater => Color::Green,
+                    std::cmp::Ordering::Less => Color::Red,
+                    std::cmp::Ordering::Equal => Color::DarkGray,
+                }),
+            ),
         ]),
         Line::from(vec![
-            Span::styled(format!("  {old_label}"), Style::default().fg(Color::DarkGray)),
-            Span::styled(format!("{}{}", old_lines, lines_text), Style::default().fg(Color::DarkGray)),
-            Span::styled(format!("  {new_label}"), Style::default().fg(Color::DarkGray)),
-            Span::styled(format!("{}{}", new_lines, lines_text), Style::default().fg(Color::DarkGray)),
+            Span::styled(
+                format!("  {old_label}"),
+                Style::default().fg(Color::DarkGray),
+            ),
+            Span::styled(
+                format!("{old_lines}{lines_text}"),
+                Style::default().fg(Color::DarkGray),
+            ),
+            Span::styled(
+                format!("  {new_label}"),
+                Style::default().fg(Color::DarkGray),
+            ),
+            Span::styled(
+                format!("{new_lines}{lines_text}"),
+                Style::default().fg(Color::DarkGray),
+            ),
         ]),
         Line::from(""),
         Line::from(Span::styled(
@@ -786,12 +880,12 @@ fn render_context_menu(frame: &mut Frame, app: &App, area: Rect) {
             // 快捷键部分用黄色，标签部分用当前样式
             let spans = vec![
                 Span::styled(
-                    format!("[{}]", shortcut),
+                    format!("[{shortcut}]"),
                     Style::default()
                         .fg(Color::Yellow)
                         .add_modifier(Modifier::BOLD),
                 ),
-                Span::styled(format!(" {}", label), style),
+                Span::styled(format!(" {label}"), style),
             ];
 
             ListItem::new(Line::from(spans))

@@ -2,7 +2,9 @@ use std::path::Path;
 
 use crate::{
     command::{exit_code, load_lenient, read_file},
-    engine::{DiffEntry, DiffKind, JsonValue, PathError, exists, get, infer_schema, parse_lenient, structural_diff},
+    engine::{
+        DiffEntry, DiffKind, JsonValue, PathError, exists, get, infer_schema, structural_diff,
+    },
     i18n::{get_locale, t_to},
     output::Ctx,
 };
@@ -145,18 +147,26 @@ pub fn cmd_type(file: &Path, path: &str, ctx: &Ctx) -> Result<i32, Box<dyn std::
 }
 
 /// `exists <path>` — exit 0 表示存在，exit 2 表示不存在。
+///
+/// 非 `--json` 模式下无 stdout 输出，仅通过退出码区分（方便 shell `if` 判断）。
 pub fn cmd_exists(file: &Path, path: &str, ctx: &Ctx) -> Result<i32, Box<dyn std::error::Error>> {
     let locale = get_locale();
     let file_str = file.display().to_string();
     let (doc, _) = load_lenient(file)?;
     if exists(&doc, path) {
-        let actions = vec![format!("jed get {path} {file_str}")];
-        ctx.print_raw_with_actions(serde_json::json!(true), &actions);
+        if ctx.json {
+            ctx.print_raw_with_actions(
+                serde_json::json!(true),
+                &[format!("jed get {path} {file_str}")],
+            );
+        }
         Ok(exit_code::OK)
     } else {
-        let msg = t_to("err.path_not_exists", &locale);
-        let fix = format!("Run 'jed keys . {file_str}' to list available paths");
-        ctx.print_error(&msg, Some(&fix), &[format!("jed keys . {file_str}")]);
+        if ctx.json {
+            let msg = t_to("err.path_not_exists", &locale);
+            let fix = format!("Run 'jed keys . {file_str}' to list available paths");
+            ctx.print_error(&msg, Some(&fix), &[format!("jed keys . {file_str}")]);
+        }
         Ok(exit_code::NOT_FOUND)
     }
 }
@@ -198,14 +208,23 @@ fn build_json_schema(value: &JsonValue) -> serde_json::Value {
     }
 }
 
-/// `check` — 校验 JSON 格式。
+/// `check` — 严格校验 JSON 格式（不容忍尾部逗号、注释等非标准语法）。
+///
+/// 合法时：非 `--json` 模式无输出，exit 0。
+/// 非法时：stderr 报错，exit 1。建议用 `jed fix` 修复后再 `check`。
 pub fn cmd_check(file: &Path, ctx: &Ctx) -> Result<i32, Box<dyn std::error::Error>> {
     let file_str = file.display().to_string();
     let content = read_file(file)?;
-    match parse_lenient(&content) {
+    // 使用严格 JSON 解析器：check 应拒绝任何非标准语法
+    match serde_json::from_str::<serde_json::Value>(&content) {
         Ok(_) => {
-            let actions = vec![format!("jed fmt {file_str}")];
-            ctx.print_raw_with_actions(serde_json::json!({"valid": true}), &actions);
+            if ctx.json {
+                ctx.print_raw_with_actions(
+                    serde_json::json!({"valid": true}),
+                    &[format!("jed fmt {file_str}")],
+                );
+            }
+            // 非 --json 模式：合法时无输出（Unix 惯例）
             Ok(exit_code::OK)
         }
         Err(e) => {
@@ -240,10 +259,7 @@ pub fn cmd_diff(file: &Path, other: &Path, ctx: &Ctx) -> Result<i32, Box<dyn std
     ];
 
     if ctx.json {
-        let diff_json: Vec<serde_json::Value> = entries
-            .iter()
-            .map(diff_entry_to_json)
-            .collect();
+        let diff_json: Vec<serde_json::Value> = entries.iter().map(diff_entry_to_json).collect();
         ctx.print_raw_with_actions(
             serde_json::json!({"identical": false, "diff": diff_json}),
             &actions,

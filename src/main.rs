@@ -10,7 +10,7 @@ use std::io::{Read, Write};
 use std::path::PathBuf;
 
 use crate::{
-    cli::{resolve_file, Cli, Command},
+    cli::{Cli, Command, resolve_file},
     output::Ctx,
 };
 
@@ -110,7 +110,9 @@ fn main() {
 
 /// 从命令参数中提取文件路径
 fn get_file_from_command(cmd: &Command, cli_file: Option<&PathBuf>) -> PathBuf {
-    if let Some(f) = cli_file && f.to_str() != Some("-") {
+    if let Some(f) = cli_file
+        && f.to_str() != Some("-")
+    {
         return f.clone();
     }
 
@@ -133,8 +135,8 @@ fn get_file_from_command(cmd: &Command, cli_file: Option<&PathBuf>) -> PathBuf {
         | Command::Diff { file, .. }
         | Command::Tree { file, .. }
         | Command::Query { file, .. }
-        | Command::Convert { file, .. } => file.clone(),
-        Command::Validate { file, .. } => file.clone(),
+        | Command::Convert { file, .. }
+        | Command::Validate { file, .. } => file.clone(),
         _ => PathBuf::from("-"),
     }
 }
@@ -191,31 +193,147 @@ struct CmdMeta {
     example: &'static str,
 }
 
+#[allow(clippy::too_many_lines)]
 fn all_commands() -> Vec<CmdMeta> {
     vec![
-        CmdMeta { name: "get",         usage: "jed get <path> <file>",                    description: "Get value at path",                          example: "jed get .database.host config.json" },
-        CmdMeta { name: "keys",        usage: "jed keys [path] <file>",                   description: "List all keys or array indices at path",      example: "jed keys .users config.json" },
-        CmdMeta { name: "len",         usage: "jed len [path] <file>",                    description: "Get array length or object key count",        example: "jed len .items data.json" },
-        CmdMeta { name: "type",        usage: "jed type [path] <file>",                   description: "Get the type of a value",                     example: "jed type .version config.json" },
-        CmdMeta { name: "exists",      usage: "jed exists <path> <file>",                 description: "Check if a path exists (exit 0=yes, 2=no)",   example: "jed exists .debug config.json" },
-        CmdMeta { name: "schema",      usage: "jed schema <file>",                        description: "Infer and display the structure of the file",  example: "jed schema config.json" },
-        CmdMeta { name: "check",       usage: "jed check <file>",                         description: "Validate JSON syntax",                        example: "jed check config.json" },
-        CmdMeta { name: "set",         usage: "jed set <path> <value> <file>",            description: "Set a value at path (creates if missing)",    example: "jed set .debug true config.json" },
-        CmdMeta { name: "del",         usage: "jed del <path> <file>",                    description: "Delete a key or array element",               example: "jed del .deprecated config.json" },
-        CmdMeta { name: "add",         usage: "jed add [path] <value> <file>",            description: "Append to array or merge into object",        example: "jed add .tags '\"beta\"' config.json" },
-        CmdMeta { name: "patch",       usage: "jed patch <operations> <file>",            description: "Batch operations via JSON Patch (RFC 6902)",  example: "jed patch '[{\"op\":\"replace\",\"path\":\".x\",\"value\":1}]' f.json" },
-        CmdMeta { name: "mv",          usage: "jed mv <src> <dst> <file>",                description: "Move/rename a key",                           example: "jed mv .oldName .newName config.json" },
-        CmdMeta { name: "fmt",         usage: "jed fmt [--indent N] <file>",              description: "Pretty-format JSON in-place",                 example: "jed fmt --indent 4 config.json" },
-        CmdMeta { name: "fix",         usage: "jed fix [--dry-run] [--strip-comments] <file>", description: "Auto-repair common JSON errors",         example: "jed fix --dry-run broken.json" },
-        CmdMeta { name: "minify",      usage: "jed minify <file>",                        description: "Minify JSON (remove all whitespace)",         example: "jed minify data.json" },
-        CmdMeta { name: "diff",        usage: "jed diff <other> <file>",                  description: "Compare two JSON files (exit 0=same, 1=diff)", example: "jed diff new.json old.json" },
-        CmdMeta { name: "tree",        usage: "jed tree [-e] [-p <path>] <file>",         description: "Display JSON as a tree",                      example: "jed tree -e config.json" },
-        CmdMeta { name: "query",       usage: "jed query <filter> <file>",                description: "Filter/query JSON using path expressions",    example: "jed query .users[0] data.json" },
-        CmdMeta { name: "validate",    usage: "jed validate <schema> <file>",             description: "Validate against a JSON Schema file",         example: "jed validate schema.json data.json" },
-        CmdMeta { name: "convert",     usage: "jed convert <format> <file>",              description: "Convert JSON to another format (yaml)",       example: "jed convert yaml config.json" },
-        CmdMeta { name: "commands",    usage: "jed commands",                             description: "List all available commands",                 example: "jed commands" },
-        CmdMeta { name: "explain",     usage: "jed explain <command>",                    description: "Show detailed help for a command",            example: "jed explain set" },
-        CmdMeta { name: "completions", usage: "jed completions <shell>",                  description: "Generate shell completion script",            example: "jed completions bash > ~/.bash_completion.d/jed" },
+        CmdMeta {
+            name: "get",
+            usage: "jed get <path> <file>",
+            description: "Get value at path",
+            example: "jed get .database.host config.json",
+        },
+        CmdMeta {
+            name: "keys",
+            usage: "jed keys [path] <file>",
+            description: "List all keys or array indices at path",
+            example: "jed keys .users config.json",
+        },
+        CmdMeta {
+            name: "len",
+            usage: "jed len [path] <file>",
+            description: "Get array length or object key count",
+            example: "jed len .items data.json",
+        },
+        CmdMeta {
+            name: "type",
+            usage: "jed type [path] <file>",
+            description: "Get the type of a value",
+            example: "jed type .version config.json",
+        },
+        CmdMeta {
+            name: "exists",
+            usage: "jed exists <path> <file>",
+            description: "Check if a path exists (exit 0=yes, 2=no)",
+            example: "jed exists .debug config.json",
+        },
+        CmdMeta {
+            name: "schema",
+            usage: "jed schema <file>",
+            description: "Infer and display the structure of the file",
+            example: "jed schema config.json",
+        },
+        CmdMeta {
+            name: "check",
+            usage: "jed check <file>",
+            description: "Validate JSON syntax",
+            example: "jed check config.json",
+        },
+        CmdMeta {
+            name: "set",
+            usage: "jed set <path> <value> <file>",
+            description: "Set a value at path (creates if missing)",
+            example: "jed set .debug true config.json",
+        },
+        CmdMeta {
+            name: "del",
+            usage: "jed del <path> <file>",
+            description: "Delete a key or array element",
+            example: "jed del .deprecated config.json",
+        },
+        CmdMeta {
+            name: "add",
+            usage: "jed add [path] <value> <file>",
+            description: "Append to array or merge into object",
+            example: "jed add .tags '\"beta\"' config.json",
+        },
+        CmdMeta {
+            name: "patch",
+            usage: "jed patch <operations> <file>",
+            description: "Batch operations via JSON Patch (RFC 6902)",
+            example: "jed patch '[{\"op\":\"replace\",\"path\":\".x\",\"value\":1}]' f.json",
+        },
+        CmdMeta {
+            name: "mv",
+            usage: "jed mv <src> <dst> <file>",
+            description: "Move/rename a key",
+            example: "jed mv .oldName .newName config.json",
+        },
+        CmdMeta {
+            name: "fmt",
+            usage: "jed fmt [--indent N] <file>",
+            description: "Pretty-format JSON in-place",
+            example: "jed fmt --indent 4 config.json",
+        },
+        CmdMeta {
+            name: "fix",
+            usage: "jed fix [--dry-run] [--strip-comments] <file>",
+            description: "Auto-repair common JSON errors",
+            example: "jed fix --dry-run broken.json",
+        },
+        CmdMeta {
+            name: "minify",
+            usage: "jed minify <file>",
+            description: "Minify JSON (remove all whitespace)",
+            example: "jed minify data.json",
+        },
+        CmdMeta {
+            name: "diff",
+            usage: "jed diff <other> <file>",
+            description: "Compare two JSON files (exit 0=same, 1=diff)",
+            example: "jed diff new.json old.json",
+        },
+        CmdMeta {
+            name: "tree",
+            usage: "jed tree [-e] [-p <path>] <file>",
+            description: "Display JSON as a tree",
+            example: "jed tree -e config.json",
+        },
+        CmdMeta {
+            name: "query",
+            usage: "jed query <filter> <file>",
+            description: "Filter/query JSON using path expressions",
+            example: "jed query .users[0] data.json",
+        },
+        CmdMeta {
+            name: "validate",
+            usage: "jed validate <schema> <file>",
+            description: "Validate against a JSON Schema file",
+            example: "jed validate schema.json data.json",
+        },
+        CmdMeta {
+            name: "convert",
+            usage: "jed convert <format> <file>",
+            description: "Convert JSON to another format (yaml)",
+            example: "jed convert yaml config.json",
+        },
+        CmdMeta {
+            name: "commands",
+            usage: "jed commands",
+            description: "List all available commands",
+            example: "jed commands",
+        },
+        CmdMeta {
+            name: "explain",
+            usage: "jed explain <command>",
+            description: "Show detailed help for a command",
+            example: "jed explain set",
+        },
+        CmdMeta {
+            name: "completions",
+            usage: "jed completions <shell>",
+            description: "Generate shell completion script",
+            example: "jed completions bash > ~/.bash_completion.d/jed",
+        },
     ]
 }
 

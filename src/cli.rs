@@ -7,7 +7,7 @@ use clap_complete::Shell;
 #[command(
     name = "jed",
     about = "Jed — JSON editor: dual-interface tool for humans and AI agents",
-    version,
+    version
 )]
 pub struct Cli {
     /// JSON 文件（位置参数）
@@ -38,16 +38,17 @@ impl Cli {
 }
 
 /// 获取命令的文件参数（优先使用全局 --file，子命令后的位置参数，或默认值）
-pub fn resolve_file(
-    cli_file: Option<&PathBuf>,
-    cmd_file: Option<&PathBuf>,
-) -> Option<PathBuf> {
+pub fn resolve_file(cli_file: Option<&PathBuf>, cmd_file: Option<&PathBuf>) -> Option<PathBuf> {
     // 1. 全局 --file
-    if let Some(f) = cli_file && f.to_str() != Some("-") {
+    if let Some(f) = cli_file
+        && f.to_str() != Some("-")
+    {
         return Some(f.clone());
     }
     // 2. 子命令位置参数
-    if let Some(f) = cmd_file && f.to_str() != Some("-") {
+    if let Some(f) = cmd_file
+        && f.to_str() != Some("-")
+    {
         return Some(f.clone());
     }
     // 3. 默认 stdin
@@ -180,14 +181,10 @@ pub enum Command {
     Commands,
 
     /// 命令帮助
-    Explain {
-        command: String,
-    },
+    Explain { command: String },
 
     /// 补全脚本
-    Completions {
-        shell: Shell,
-    },
+    Completions { shell: Shell },
 
     /// 树形展示
     Tree {

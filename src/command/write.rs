@@ -2,7 +2,7 @@ use std::path::Path;
 
 use crate::{
     command::{exit_code, load_lenient, write_file_atomic},
-    engine::{add, delete, format_pretty, get, move_value, set, FormatOptions, JsonValue},
+    engine::{FormatOptions, JsonValue, add, delete, format_pretty, get, move_value, set},
     i18n::{get_locale, t_to},
     output::Ctx,
 };
@@ -95,11 +95,7 @@ pub fn cmd_mv(
 }
 
 /// `patch <operations>` — 批量操作（JSON Patch RFC 6902）。
-pub fn cmd_patch(
-    file: &Path,
-    raw_ops: &str,
-    ctx: &Ctx,
-) -> Result<i32, Box<dyn std::error::Error>> {
+pub fn cmd_patch(file: &Path, raw_ops: &str, ctx: &Ctx) -> Result<i32, Box<dyn std::error::Error>> {
     let locale = get_locale();
     let file_str = file.display().to_string();
     let (mut doc, _) = load_lenient(file)?;
@@ -124,10 +120,7 @@ pub fn cmd_patch(
 
     save(file, &doc)?;
     let actions = vec![format!("jed get . {file_str}")];
-    ctx.print_raw_with_actions(
-        serde_json::json!({"patched": applied}),
-        &actions,
-    );
+    ctx.print_raw_with_actions(serde_json::json!({"patched": applied}), &actions);
     Ok(exit_code::OK)
 }
 
@@ -170,9 +163,7 @@ fn apply_patch_op(doc: &mut JsonValue, op: &PatchOp) -> Result<(), Box<dyn std::
             let actual = crate::engine::get(doc, &op.path)?;
             let expected_je = JsonValue::from(expected.clone());
             if *actual != expected_je {
-                return Err(
-                    format!("test 断言失败：路径 {} 的值不符合预期", op.path).into(),
-                );
+                return Err(format!("test 断言失败：路径 {} 的值不符合预期", op.path).into());
             }
         }
         unknown => {

@@ -2,7 +2,7 @@ use std::path::Path;
 
 use crate::{
     command::{exit_code, load_lenient, read_file, write_file_atomic},
-    engine::{fix_to_value, format_compact, format_pretty, FormatOptions},
+    engine::{FormatOptions, fix_to_value, format_compact, format_pretty},
     i18n::{get_locale, t_to},
     output::Ctx,
 };
@@ -102,10 +102,7 @@ pub fn cmd_fix(
         format!("jed check {file_str}"),
         format!("jed fmt {file_str}"),
     ];
-    ctx.print_raw_with_actions(
-        serde_json::json!({"fixed": count}),
-        &actions,
-    );
+    ctx.print_raw_with_actions(serde_json::json!({"fixed": count}), &actions);
     Ok(exit_code::OK)
 }
 

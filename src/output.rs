@@ -1,6 +1,6 @@
 use serde_json::{Value, json};
 
-use crate::engine::{format_compact, JsonValue};
+use crate::engine::{JsonValue, format_compact};
 
 /// Per-invocation context: which command is running and what output mode.
 pub struct Ctx {
@@ -19,7 +19,11 @@ impl Ctx {
         if self.json {
             println!("{}", build_ok(self.cmd, je_to_serde(v), actions));
         } else {
-            println!("{}", format_compact(v));
+            // 字符串裸输出（不含引号），方便 shell 直接使用
+            match v {
+                JsonValue::String(s) => println!("{s}"),
+                other => println!("{}", format_compact(other)),
+            }
         }
     }
 

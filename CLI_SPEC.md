@@ -166,7 +166,8 @@ jed check broken.json
 jed tree config.json
 # 输出：
 # {
-#   name: Alice
+#   name:   "Alice"
+#   age:   30
 #   servers: ...
 # }
 
@@ -215,7 +216,7 @@ jed diff new.json old.json
 
 ```bash
 jed set .name '"Bob"' config.json
-# 输出：ok
+# 输出：Bob（返回设置后的值，字符串裸输出）
 
 jed set .server.host '"127.0.0.1"' config.json
 # 若 .server 不存在，自动创建对象
@@ -235,7 +236,7 @@ jed set .config '{"timeout": 30}' config.json
 
 ```bash
 jed del .name config.json
-# 输出：ok
+# 输出：deleted
 
 jed del .servers[1] config.json
 # 删除数组中的第 2 个元素
@@ -250,10 +251,11 @@ jed del .servers[1] config.json
 ```bash
 # 追加到数组
 jed add .tags '"golang"' config.json
-# 输出：ok
+# 输出：更新后的数组（如 ["rust","golang"]）
 
 # 合并到对象（已存在的 key 会被覆盖）
 jed add .server '{"timeout": 30, "retry": 3}' config.json
+# 输出：更新后的对象
 ```
 
 ---
@@ -264,7 +266,7 @@ jed add .server '{"timeout": 30, "retry": 3}' config.json
 
 ```bash
 jed mv .oldName .newName config.json
-# 输出：ok
+# 输出：移动后的值（如 Alice）
 ```
 
 ---
@@ -282,7 +284,7 @@ jed patch '[
   {"op": "remove",  "path": ".legacy"},
   {"op": "add",     "path": ".tags/-",  "value": "new"}
 ]' config.json
-# 输出：patched 4 ops
+# 输出：{"patched": 4}
 ```
 
 注：数组末尾追加使用 `path/-` 后缀（RFC 6902 规范）。
@@ -297,7 +299,7 @@ jed patch '[
 
 ```bash
 jed fmt config.json
-# 输出：ok
+# 输出：formatted
 
 jed fmt --indent 4 config.json
 # 使用 4 空格缩进
@@ -311,11 +313,10 @@ jed fmt --indent 4 config.json
 
 ```bash
 jed fix broken.json
-# 输出：fixed 3 errors
-#   第 12 行：移除尾部逗号
-#   第 18 行：单引号替换为双引号
+# 输出：{"fixed": 3}
 
 jed fix --dry-run broken.json
+# 输出：{"repairs_needed": 2, "repairs": [{"line": 1, "description": "..."}]}
 # 预览将修复的内容，不实际写入文件
 
 jed fix --strip-comments file.jsonc
@@ -330,7 +331,7 @@ jed fix --strip-comments file.jsonc
 
 ```bash
 jed minify config.json
-# 输出：ok
+# 输出：minified
 ```
 
 ---

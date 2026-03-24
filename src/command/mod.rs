@@ -6,7 +6,7 @@ use std::{fs, path::Path, process};
 
 use crate::{
     cli::Command,
-    engine::{get, parse_lenient, JsonValue},
+    engine::{JsonValue, get, parse_lenient},
     i18n::{get_locale, t_to},
     output::Ctx,
 };
@@ -291,7 +291,9 @@ fn validate_against_schema(
     path: &str,
     errors: &mut Vec<ValidationError>,
 ) {
-    let Some(schema_obj) = schema.as_object() else { return };
+    let Some(schema_obj) = schema.as_object() else {
+        return;
+    };
 
     // type
     if let Some(JsonValue::String(type_str)) = schema_obj.get("type") {
@@ -302,11 +304,7 @@ fn validate_against_schema(
         if !matches {
             errors.push(ValidationError {
                 path: path.to_string(),
-                message: format!(
-                    "expected type '{}', got '{}'",
-                    type_str,
-                    value.type_name()
-                ),
+                message: format!("expected type '{}', got '{}'", type_str, value.type_name()),
             });
             return; // 类型不匹配时停止深入验证
         }
@@ -317,7 +315,9 @@ fn validate_against_schema(
         (schema_obj.get("required"), value.as_object())
     {
         for req in reqs {
-            if let JsonValue::String(key) = req && !obj.contains_key(key.as_str()) {
+            if let JsonValue::String(key) = req
+                && !obj.contains_key(key.as_str())
+            {
                 errors.push(ValidationError {
                     path: path.to_string(),
                     message: format!("missing required field '{key}'"),
@@ -350,7 +350,9 @@ fn validate_against_schema(
     }
 
     // enum（枚举值）
-    if let Some(JsonValue::Array(enum_vals)) = schema_obj.get("enum") && !enum_vals.contains(value) {
+    if let Some(JsonValue::Array(enum_vals)) = schema_obj.get("enum")
+        && !enum_vals.contains(value)
+    {
         let options: Vec<String> = enum_vals.iter().map(ToString::to_string).collect();
         errors.push(ValidationError {
             path: path.to_string(),
@@ -365,25 +367,33 @@ fn validate_number(
     schema_obj: &indexmap::IndexMap<String, JsonValue>,
     errors: &mut Vec<ValidationError>,
 ) {
-    if let Some(JsonValue::Number(min)) = schema_obj.get("minimum") && n < *min {
+    if let Some(JsonValue::Number(min)) = schema_obj.get("minimum")
+        && n < *min
+    {
         errors.push(ValidationError {
             path: path.to_string(),
             message: format!("value {n} is less than minimum {min}"),
         });
     }
-    if let Some(JsonValue::Number(max)) = schema_obj.get("maximum") && n > *max {
+    if let Some(JsonValue::Number(max)) = schema_obj.get("maximum")
+        && n > *max
+    {
         errors.push(ValidationError {
             path: path.to_string(),
             message: format!("value {n} is greater than maximum {max}"),
         });
     }
-    if let Some(JsonValue::Number(excl_min)) = schema_obj.get("exclusiveMinimum") && n <= *excl_min {
+    if let Some(JsonValue::Number(excl_min)) = schema_obj.get("exclusiveMinimum")
+        && n <= *excl_min
+    {
         errors.push(ValidationError {
             path: path.to_string(),
             message: format!("value {n} must be greater than {excl_min}"),
         });
     }
-    if let Some(JsonValue::Number(excl_max)) = schema_obj.get("exclusiveMaximum") && n >= *excl_max {
+    if let Some(JsonValue::Number(excl_max)) = schema_obj.get("exclusiveMaximum")
+        && n >= *excl_max
+    {
         errors.push(ValidationError {
             path: path.to_string(),
             message: format!("value {n} must be less than {excl_max}"),
@@ -579,9 +589,7 @@ fn yaml_scalar(value: &JsonValue) -> String {
 }
 
 fn parse_json(s: &str) -> JsonValue {
-    parse_lenient(s)
-        .map(|o| o.value)
-        .unwrap_or(JsonValue::Null)
+    parse_lenient(s).map(|o| o.value).unwrap_or(JsonValue::Null)
 }
 
 // ── 文件 I/O 帮助函数 ─────────────────────────────────────────────────────────

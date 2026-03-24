@@ -123,33 +123,37 @@ fn handle_normal(app: &mut App, key: KeyEvent) {
 
         // 退出：Esc 两次，或未修改时直接 Esc
         (KeyCode::Esc, _) => {
-            if !app.modified {
-                // 未修改时直接退出
-                app.should_quit = true;
-            } else {
+            if app.modified {
                 // 已修改：检查是否是连续按两次 Esc
                 let now = Instant::now();
-                let is_double_escape = app.last_escape_time
-                    .map(|last| now.duration_since(last) < Duration::from_millis(500))
-                    .unwrap_or(false);
+                let is_double_escape = app
+                    .last_escape_time
+                    .is_some_and(|last| now.duration_since(last) < Duration::from_millis(500));
 
                 if is_double_escape {
                     // 连续按两次，强制退出
                     app.should_quit = true;
                 } else {
                     // 第一次按，或超时了，显示确认对话框
-                    app.mode = AppMode::ConfirmQuit { last_was_escape: true };
+                    app.mode = AppMode::ConfirmQuit {
+                        last_was_escape: true,
+                    };
                     app.last_escape_time = Some(now);
                 }
+            } else {
+                // 未修改时直接退出
+                app.should_quit = true;
             }
         }
 
         // Ctrl+Q 仍然支持，作为退出的快捷方式
         (KeyCode::Char('q'), KeyModifiers::CONTROL) => {
-            if !app.modified {
-                app.should_quit = true;
+            if app.modified {
+                app.mode = AppMode::ConfirmQuit {
+                    last_was_escape: false,
+                };
             } else {
-                app.mode = AppMode::ConfirmQuit { last_was_escape: false };
+                app.should_quit = true;
             }
         }
 
@@ -161,7 +165,10 @@ fn handle_normal(app: &mut App, key: KeyEvent) {
 
 fn handle_edit(app: &mut App, key: KeyEvent) {
     let AppMode::Edit {
-        buffer, cursor_pos, value_type, ..
+        buffer,
+        cursor_pos,
+        value_type,
+        ..
     } = &mut app.mode
     else {
         return;
@@ -178,13 +185,11 @@ fn handle_edit(app: &mut App, key: KeyEvent) {
         KeyCode::Tab => {
             if *value_type == "boolean" {
                 let current = buffer.trim();
-                if current == "true" {
-                    *buffer = "false".to_string();
-                } else if current == "false" {
-                    *buffer = "true".to_string();
+                *buffer = if current == "true" {
+                    "false".to_string()
                 } else {
-                    *buffer = "true".to_string();
-                }
+                    "true".to_string()
+                };
                 *cursor_pos = buffer.len();
                 app.update_edit_validation();
             }
@@ -482,20 +487,21 @@ fn handle_context_menu(app: &mut App, key: KeyEvent) {
 fn handle_mouse(app: &mut App, event: crossterm::event::MouseEvent) {
     // 退出确认对话框的鼠标点击
     if let AppMode::ConfirmQuit { .. } = &app.mode {
-        if event.kind == crossterm::event::MouseEventKind::Down(crossterm::event::MouseButton::Left) {
+        if event.kind == crossterm::event::MouseEventKind::Down(crossterm::event::MouseButton::Left)
+        {
             // 对话框位置在屏幕中央，宽度48，高度7
             // 简化处理：根据列判断点击了哪个按钮
             // [Y] 在列 10-20, [N] 在列 22-32, [C] 在列 36-44
             if event.row > 0 && event.row < 20 {
                 let col = event.column as i32;
-                if col >= 10 && col < 20 {
+                if (10..20).contains(&col) {
                     // [Y] 保存并退出
                     app.do_save();
                     app.should_quit = true;
-                } else if col >= 22 && col < 32 {
+                } else if (22..32).contains(&col) {
                     // [N] 不保存退出
                     app.should_quit = true;
-                } else if col >= 36 && col < 44 {
+                } else if (36..44).contains(&col) {
                     // [C] 取消
                     app.mode = AppMode::Normal;
                 }

@@ -55,22 +55,14 @@ pub fn supported_locales() -> Vec<&'static str> {
 /// Platform-specific modifier key display.
 /// Returns "Ctrl" on Windows/Linux, "⌘" on macOS.
 pub fn modifier_key() -> &'static str {
-    if OS == "macos" {
-        "⌘"
-    } else {
-        "Ctrl"
-    }
+    if OS == "macos" { "⌘" } else { "Ctrl" }
 }
 
 /// Platform-specific shortcut prefix.
 /// Returns "⌘" for macOS, "Ctrl" for others.
 #[allow(dead_code)]
 pub fn modifier_key_shortcut() -> &'static str {
-    if OS == "macos" {
-        "⌘"
-    } else {
-        "Ctrl"
-    }
+    if OS == "macos" { "⌘" } else { "Ctrl" }
 }
 
 /// Check if the current platform is macOS.
@@ -200,7 +192,7 @@ pub fn t_to(key: &str, locale: &str) -> String {
         "err.save_failed" => tr(locale, "保存失败：{0}", "Save failed: {0}"),
 
         // TUI actions
-        "tui.action.edit" => tr(locale, "编辑", "Edit"),
+        "tui.action.edit" | "tui.help.edit" => tr(locale, "编辑", "Edit"),
         "tui.action.add_child" => tr(locale, "添加子级", "Add Child"),
         "tui.action.add_sibling" => tr(locale, "添加兄弟", "Add Sibling"),
         "tui.action.delete" => tr(locale, "删除", "Delete"),
@@ -254,8 +246,8 @@ pub fn t_to(key: &str, locale: &str) -> String {
         "tui.hint.move" => tr(locale, "移动", "Move"),
         "tui.hint.expand" => tr(locale, "展开", "Expand"),
         "tui.hint.new" => tr(locale, "新建", "New"),
-        "tui.hint.search_key" => tr(locale, "搜索", "Search"),
-        "tui.hint.save" => tr(locale, "保存", "Save"),
+        "tui.hint.search_key" | "tui.help.search" => tr(locale, "搜索", "Search"),
+        "tui.hint.save" | "tui.help.save" => tr(locale, "保存", "Save"),
         "tui.hint.toggle" => tr(locale, "切换", "Toggle"),
         "tui.hint.confirm" => tr(locale, "确认", "Confirm"),
         "tui.hint.cancel" => tr(locale, "取消", "Cancel"),
@@ -313,7 +305,11 @@ pub fn t_to(key: &str, locale: &str) -> String {
         "tui.status.old_lines" => tr(locale, "旧: ", "Old: "),
         "tui.status.new_lines" => tr(locale, "→  新: ", "→  New: "),
         "tui.status.lines" => tr(locale, " 行", " lines"),
-        "tui.status.string_as_str" => tr(locale, "string (将作为字符串保存)", "string (will be saved as string)"),
+        "tui.status.string_as_str" => tr(
+            locale,
+            "string (将作为字符串保存)",
+            "string (will be saved as string)",
+        ),
 
         // TUI overlays
         "tui.overlay.edit" => tr(locale, " 编辑 {0} - {1} ", " Edit {0} - {1} "),
@@ -342,23 +338,32 @@ pub fn t_to(key: &str, locale: &str) -> String {
         "tui.help.title" => tr(locale, "帮助", "Help"),
         "tui.help.help_title" => tr(locale, "快捷键帮助", "Keyboard Shortcuts"),
         "tui.help.nav" => tr(locale, "导航", "Navigation"),
-        "tui.help.edit" => tr(locale, "编辑", "Edit"),
         "tui.help.file" => tr(locale, "文件", "File"),
-        "tui.help.close_help" => tr(locale, "按 [F1] / [Esc] / [Enter] 关闭帮助", "Press [F1] / [Esc] / [Enter] to close"),
-        "tui.help.save" => tr(locale, "保存", "Save"),
+        "tui.help.close_help" => tr(
+            locale,
+            "按 [F1] / [Esc] / [Enter] 关闭帮助",
+            "Press [F1] / [Esc] / [Enter] to close",
+        ),
         "tui.help.undo" => tr(locale, "撤销", "Undo"),
         "tui.help.redo" => tr(locale, "重做", "Redo"),
         "tui.help.quit" => tr(locale, "退出 (连续按两次)", "Quit (press twice)"),
         "tui.help.move_up_down" => tr(locale, "上下移动", "Move up/down"),
-        "tui.help.collapse_expand" => tr(locale, "折叠 / 展开或进入子节点", "Collapse / Expand or enter child"),
+        "tui.help.collapse_expand" => tr(
+            locale,
+            "折叠 / 展开或进入子节点",
+            "Collapse / Expand or enter child",
+        ),
         "tui.help.toggle_expand" => tr(locale, "切换展开 / 折叠", "Toggle expand/collapse"),
         "tui.help.quick_scroll" => tr(locale, "快速滚动 (一次10行)", "Quick scroll (10 lines)"),
         "tui.help.jump_begin_end" => tr(locale, "跳到开头 / 末尾", "Jump to start/end"),
         "tui.help.edit_value" => tr(locale, "编辑值 / 展开节点", "Edit value / Expand node"),
         "tui.help.new_node" => tr(locale, "新建节点", "New node"),
         "tui.help.delete_node" => tr(locale, "删除节点", "Delete node"),
-        "tui.help.toggle_bool" => tr(locale, "编辑布尔值时切换 true/false", "Toggle true/false when editing bool"),
-        "tui.help.search" => tr(locale, "搜索", "Search"),
+        "tui.help.toggle_bool" => tr(
+            locale,
+            "编辑布尔值时切换 true/false",
+            "Toggle true/false when editing bool",
+        ),
 
         _ => key.to_string(),
     }
