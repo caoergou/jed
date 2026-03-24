@@ -8,7 +8,7 @@ pub mod schema;
 pub mod value;
 
 pub use diff::{DiffEntry, DiffKind, structural_diff};
-pub use edit::{add, delete, move_value, rename_key, set};
+pub use edit::{add, delete, insert, move_value, rename_key, set};
 pub use fix::fix_to_value;
 pub use format::{FormatOptions, format_compact, format_pretty};
 pub use parser::{Repair, parse_lenient};

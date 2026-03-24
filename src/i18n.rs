@@ -5,7 +5,6 @@
 //! Platform detection: Returns OS-specific modifier key names (Ctrl vs Cmd)
 
 use std::env;
-use std::env::consts::OS;
 
 /// Get the current locale with proper detection priority:
 /// 1. `JED_LANG` (explicit user setting)
@@ -52,92 +51,6 @@ fn normalize_locale(locale: &str) -> String {
         return "zh-CN".to_string();
     }
     "en".to_string()
-}
-
-/// Get list of supported locales.
-#[allow(dead_code)]
-pub fn supported_locales() -> Vec<&'static str> {
-    vec!["en", "zh-CN", "zh-TW"]
-}
-
-/// Platform-specific modifier key display.
-/// Returns "Ctrl" on Windows/Linux, "⌘" on macOS.
-#[allow(dead_code)]
-pub fn modifier_key() -> &'static str {
-    if OS == "macos" { "⌘" } else { "Ctrl" }
-}
-
-/// Platform-specific shortcut prefix.
-/// Returns "⌘" for macOS, "Ctrl" for others.
-#[allow(dead_code)]
-pub fn modifier_key_shortcut() -> &'static str {
-    if OS == "macos" { "⌘" } else { "Ctrl" }
-}
-
-/// Check if the current platform is macOS.
-#[allow(dead_code)]
-pub fn is_macos() -> bool {
-    OS == "macos"
-}
-
-/// Format a key for display with Unicode symbols.
-/// Transforms common keys into more visual representations:
-/// - Enter → ↵
-/// - Space → ␣
-/// - Escape/Esc → Esc
-/// - Tab → ⇥
-/// - Backspace → ⌫
-/// - Delete → Del
-/// - Up/Down/Left/Right → ↑↓←→
-/// - PageUp/PageDown → PgUp/PgDn
-/// - Home/End → Home/End
-/// - Modifier keys: Ctrl → Ctrl/⌘, Shift → ⇧, Alt → ⌥ (platform-aware)
-#[allow(dead_code)]
-pub fn format_key(key: &str) -> String {
-    match key.to_lowercase().as_str() {
-        "enter" => "↵".to_string(),
-        "space" => "␣".to_string(),
-        "escape" | "esc" => "Esc".to_string(),
-        "tab" => "⇥".to_string(),
-        "backspace" => "⌫".to_string(),
-        "delete" | "del" => "Del".to_string(),
-        "up" => "↑".to_string(),
-        "down" => "↓".to_string(),
-        "left" => "←".to_string(),
-        "right" => "→".to_string(),
-        "pageup" => "PgUp".to_string(),
-        "pagedown" => "PgDn".to_string(),
-        "home" => "Home".to_string(),
-        "end" => "End".to_string(),
-        "insert" => "Ins".to_string(),
-        // Modifier keys with platform awareness
-        "ctrl" | "control" => modifier_key().to_string(),
-        "shift" => "⇧".to_string(),
-        "alt" => "⌥".to_string(),
-        // Default: capitalize first letter
-        _ => {
-            let mut chars = key.chars();
-            match chars.next() {
-                None => String::new(),
-                Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
-            }
-        }
-    }
-}
-
-/// Format a shortcut combination like "Ctrl+S" into "⌘+S" (macOS) or "Ctrl+S" (Linux/Windows)
-#[allow(dead_code)]
-pub fn format_shortcut(keys: &str) -> String {
-    // Split by '+' and format each part
-    let parts: Vec<&str> = keys.split('+').collect();
-    let formatted: Vec<String> = parts.iter().map(|k| format_key(k)).collect();
-    formatted.join("+")
-}
-
-/// Translate a key to the current locale.
-#[allow(dead_code)]
-pub fn t(key: &str) -> String {
-    t_to(key, &get_locale())
 }
 
 /// Translate a key to a specific locale.
@@ -346,11 +259,6 @@ pub fn t_to(key: &str, locale: &str) -> String {
         "tui.status.copied_path" => tr(locale, "已复制路径: {0}", "Copied path: {0}"),
         "tui.status.expanded_all" => tr(locale, "已展开全部节点", "Expanded all nodes"),
         "tui.status.collapsed_all" => tr(locale, "已折叠全部节点", "Collapsed all nodes"),
-        "tui.status.add_sibling_wip" => tr(
-            locale,
-            "添加兄弟节点功能开发中",
-            "Add sibling feature is work in progress",
-        ),
         "tui.status.no_undo" => tr(locale, "没有可撤销的操作", "No operations to undo"),
         "tui.status.undone" => tr(locale, "已撤销", "Undone"),
         "tui.status.no_redo" => tr(locale, "没有可重做的操作", "No operations to redo"),
