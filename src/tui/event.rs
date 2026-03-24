@@ -46,7 +46,9 @@ fn handle_key(app: &mut App, key: KeyEvent) {
 
 fn handle_normal(app: &mut App, key: KeyEvent) {
     // 先清除上次状态消息
-    app.status = None;
+    if app.file_changed.is_none() {
+        app.status = None;
+    }
 
     match (key.code, key.modifiers) {
         // 导航：只用方向键
@@ -174,6 +176,50 @@ fn handle_normal(app: &mut App, key: KeyEvent) {
             } else {
                 app.should_quit = true;
             }
+        }
+
+        // Watch 模式：R 重新加载文件
+        (KeyCode::Char('r'), KeyModifiers::CONTROL) | (KeyCode::Char('R'), _) => {
+            if app.file_changed.is_some() {
+                app.set_status(
+                    &t_to("tui.status.reloading", &get_locale()),
+                    StatusLevel::Info,
+                );
+                match app.reload() {
+                    Ok(()) => {
+                        app.set_status(&t_to("status.updated", &get_locale()), StatusLevel::Info);
+                    }
+                    Err(e) => {
+                        app.set_status(
+                            &t_to("tui.status.reload_failed", &get_locale())
+                                .replace("{0}", &e.to_string()),
+                            StatusLevel::Error,
+                        );
+                    }
+                }
+            }
+        }
+
+        // Watch 模式：M 忽略文件变化
+        (KeyCode::Char('m'), KeyModifiers::CONTROL) | (KeyCode::Char('M'), _) => {
+            if app.file_changed.is_some() {
+                app.dismiss_file_change();
+                app.set_status(
+                    &t_to("tui.status.watch_mode", &get_locale()),
+                    StatusLevel::Info,
+                );
+            }
+        }
+
+        // W 切换 watch 模式
+        (KeyCode::Char('w'), KeyModifiers::CONTROL) | (KeyCode::Char('W'), _) => {
+            app.watch_enabled = !app.watch_enabled;
+            let msg = if app.watch_enabled {
+                t_to("tui.status.watch_mode", &get_locale())
+            } else {
+                t_to("tui.status.watch_disabled", &get_locale())
+            };
+            app.set_status(&msg, StatusLevel::Info);
         }
 
         _ => {}

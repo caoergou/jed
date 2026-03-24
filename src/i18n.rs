@@ -252,6 +252,20 @@ pub fn t_to(key: &str, locale: &str) -> String {
             "string (将作为字符串保存)",
             "string (will be saved as string)",
         ),
+        "tui.status.file_changed" => tr(
+            locale,
+            " 文件已变化！按 R 重新加载或 M 忽略",
+            " File changed externally! Press R to reload or M to dismiss",
+        ),
+        "tui.status.reloading" => tr(locale, " 正在重新加载...", " Reloading..."),
+        "tui.status.reload_failed" => tr(locale, " 重新加载失败：{0}", " Reload failed: {0}"),
+        "tui.status.large_file" => tr(
+            locale,
+            " 大文件模式：{0}，自动展开受限",
+            " Large file mode: {0}, auto-expand limited",
+        ),
+        "tui.status.watch_mode" => tr(locale, " 监控中", " Watching"),
+        "tui.status.watch_disabled" => tr(locale, " 监控已禁用", " Watch disabled"),
 
         // TUI overlays
         "tui.overlay.edit" => tr(locale, " 编辑 {0} - {1} ", " Edit {0} - {1} "),
@@ -323,6 +337,9 @@ pub fn t_to(key: &str, locale: &str) -> String {
             "编辑布尔值时切换 true/false",
             "Toggle true/false when editing bool",
         ),
+        "tui.help.watch_reload" => tr(locale, "重新加载变化的文件", "Reload changed file"),
+        "tui.help.watch_dismiss" => tr(locale, "忽略文件变化", "Dismiss file change"),
+        "tui.help.watch_toggle" => tr(locale, "开关文件监控", "Toggle file watch"),
 
         _ => key.to_string(),
     }

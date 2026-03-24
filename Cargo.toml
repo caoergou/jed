@@ -21,6 +21,9 @@ ratatui = "0.29"
 crossterm = "0.28"
 arboard = "3"
 toml = "0.8"
+notify = "8"
+notify-debouncer-mini = "0.6"
+parking_lot = "0.12"
 
 [dev-dependencies]
 pretty_assertions = "1"
