@@ -20,7 +20,7 @@ fn main() {
     // 设置语言环境
     if let Some(lang) = &cli.lang {
         // SAFETY: 单线程 CLI 应用中设置环境变量是安全的
-        unsafe { std::env::set_var("JED_LANG", lang) };
+        unsafe { std::env::set_var("JZEN_LANG", lang) };
     }
 
     let json = cli.json;

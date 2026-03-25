@@ -1,18 +1,18 @@
 //! Internationalization (i18n) module for bilingual support.
 //!
 //! Supports English (en) and Chinese (zh-CN).
-//! Language detection: `JED_LANG` > `LC_ALL`/`LANG` > Default (en)
+//! Language detection: `JZEN_LANG` > `LC_ALL`/`LANG` > Default (en)
 //! Platform detection: Returns OS-specific modifier key names (Ctrl vs Cmd)
 
 use std::env;
 
 /// Get the current locale with proper detection priority:
-/// 1. `JED_LANG` (explicit user setting)
+/// 1. `JZEN_LANG` (explicit user setting)
 /// 2. `LC_ALL`, `LC_MESSAGES`, `LANG` (system language)
 /// 3. Default: English
 pub fn get_locale() -> String {
     // 1. Explicit user configuration
-    if let Ok(v) = env::var("JED_LANG")
+    if let Ok(v) = env::var("JZEN_LANG")
         && !v.is_empty()
     {
         return normalize_locale(&v);
